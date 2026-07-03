@@ -1,0 +1,296 @@
+{
+  "workbook_id": "central-imu-analysis-v1",
+  "name": "Central IMU + GPS + HR",
+  "workbook_version": 1,
+  "created_at_ms": 1781654400000,
+  "updated_at_ms": 1781654400000,
+  "math_channels": [
+    {
+      "name": "Longitudinal accel",
+      "expression": "vx(rotate_axis(vec(declip([IMU0_AccelX]), declip([IMU0_AccelY]), declip([IMU0_AccelZ])), 0, 1, 0, deg2rad(30)))",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF00BCD4"
+    },
+    {
+      "name": "Lateral accel",
+      "expression": "vy(rotate_axis(vec(declip([IMU0_AccelX]), declip([IMU0_AccelY]), declip([IMU0_AccelZ])), 0, 1, 0, deg2rad(30)))",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFFFC107"
+    },
+    {
+      "name": "Vertical accel",
+      "expression": "vz(rotate_axis(vec(declip([IMU0_AccelX]), declip([IMU0_AccelY]), declip([IMU0_AccelZ])), 0, 1, 0, deg2rad(30)))",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF8BC34A"
+    },
+    {
+      "name": "Combined horizontal g",
+      "expression": "sqrt(pow([Longitudinal accel], 2) + pow([Lateral accel], 2))",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFFF9800"
+    },
+    {
+      "name": "Roll rate",
+      "expression": "vx(rotate_axis(vec([IMU0_GyroX], [IMU0_GyroY], [IMU0_GyroZ]), 0, 1, 0, deg2rad(30)))",
+      "quantity": "Angular Speed",
+      "units": "deg/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 1,
+      "color": "#FF2196F3"
+    },
+    {
+      "name": "Pitch rate",
+      "expression": "vy(rotate_axis(vec([IMU0_GyroX], [IMU0_GyroY], [IMU0_GyroZ]), 0, 1, 0, deg2rad(30)))",
+      "quantity": "Angular Speed",
+      "units": "deg/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 1,
+      "color": "#FF7E57C2"
+    },
+    {
+      "name": "Yaw rate",
+      "expression": "vz(rotate_axis(vec([IMU0_GyroX], [IMU0_GyroY], [IMU0_GyroZ]), 0, 1, 0, deg2rad(30)))",
+      "quantity": "Angular Speed",
+      "units": "deg/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 1,
+      "color": "#FFEC407A"
+    }
+  ],
+  "worksheets": [
+    {
+      "id": "ws-session",
+      "name": "Session",
+      "xAxisMode": "time",
+      "kind": "sessionSheet",
+      "charts": [
+        {
+          "slotId": "slot-session-gpsmap",
+          "chartType": "gpsMap",
+          "channelIds": [],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.5,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "Track map"
+        },
+        {
+          "slotId": "slot-session-laptable",
+          "chartType": "lapTable",
+          "channelIds": [],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "Lap times"
+        },
+        {
+          "slotId": "slot-session-lapprogression",
+          "chartType": "lapProgression",
+          "channelIds": [],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "Lap progression"
+        }
+      ]
+    },
+    {
+      "id": "ws-speed",
+      "name": "Speed & line",
+      "xAxisMode": "time",
+      "charts": [
+        {
+          "slotId": "slot-speed-gps",
+          "chartType": "timeSeries",
+          "channelIds": ["GPS_SpeedKmh"],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "GPS speed"
+        },
+        {
+          "slotId": "slot-speed-alt",
+          "chartType": "timeSeries",
+          "channelIds": ["GPS_Altitude"],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "Elevation (GPS altitude)"
+        }
+      ]
+    },
+    {
+      "id": "ws-grip",
+      "name": "Cornering & braking g",
+      "xAxisMode": "time",
+      "charts": [
+        {
+          "slotId": "slot-grip-long",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": ["Longitudinal accel"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Longitudinal g — braking (−) / drive (+)"
+        },
+        {
+          "slotId": "slot-grip-lat",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": ["Lateral accel"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Lateral g — cornering"
+        },
+        {
+          "slotId": "slot-grip-combined",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": ["Combined horizontal g"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "Combined horizontal g (grip usage)"
+        },
+        {
+          "slotId": "slot-grip-lathist",
+          "chartType": "histogram",
+          "channelIds": [],
+          "mathChannelIds": ["Lateral accel"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "histogramBinCount": 40,
+          "histogramSymmetric": true,
+          "title": "Lateral-g distribution (L/R balance)"
+        }
+      ]
+    },
+    {
+      "id": "ws-ride",
+      "name": "Ride roughness + FFT",
+      "xAxisMode": "time",
+      "charts": [
+        {
+          "slotId": "slot-ride-vert",
+          "chartType": "timeSeries",
+          "channelIds": ["IMU0_AccelZ"],
+          "mathChannelIds": ["Vertical accel"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Vertical accel — raw axis vs declipped + levelled"
+        },
+        {
+          "slotId": "slot-ride-hist",
+          "chartType": "histogram",
+          "channelIds": [],
+          "mathChannelIds": ["Vertical accel"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "histogramBinCount": 40,
+          "title": "Vertical-accel distribution (impacts)"
+        },
+        {
+          "slotId": "slot-ride-fft",
+          "chartType": "fft",
+          "channelIds": [],
+          "mathChannelIds": ["Vertical accel", "Longitudinal accel", "Lateral accel"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "fftWindow": "hann",
+          "fftXScale": "log",
+          "fftOverlapPercent": 50.0,
+          "fftDetrend": "mean",
+          "fftAveraging": "mean",
+          "fftScaling": "magnitude",
+          "fftYScale": "linear",
+          "title": "Chassis resonance (FFT)"
+        }
+      ]
+    },
+    {
+      "id": "ws-attitude",
+      "name": "Attitude rates",
+      "xAxisMode": "time",
+      "charts": [
+        {
+          "slotId": "slot-attitude-rates",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": ["Roll rate", "Pitch rate", "Yaw rate"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Roll / pitch / yaw rate — levelled (roll=lean, pitch=brake-dive, yaw=steering)"
+        }
+      ]
+    },
+    {
+      "id": "ws-hr",
+      "name": "Heart rate / effort",
+      "xAxisMode": "time",
+      "charts": [
+        {
+          "slotId": "slot-hr-bpm",
+          "chartType": "timeSeries",
+          "channelIds": ["HR_BPM"],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "Heart rate"
+        },
+        {
+          "slotId": "slot-hr-speed",
+          "chartType": "timeSeries",
+          "channelIds": ["GPS_SpeedKmh"],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "Speed (for context)"
+        }
+      ]
+    }
+  ]
+}

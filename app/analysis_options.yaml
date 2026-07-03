@@ -1,0 +1,44 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    # flutter_rust_bridge codegen output — owned by the generator, not analyzed.
+    - lib/src/rust/**
+    # cargokit vendored build tooling — its own package, pub-resolved by cargokit
+    # at build time; not our code to analyze.
+    - rust_builder/**
+  strong-mode:
+    implicit-casts: false
+    implicit-dynamic: false
+  errors:
+    missing_required_param: error
+    missing_return: error
+    todo: ignore                    # TODOs are tracked in TASKS.md, not as lint errors
+
+linter:
+  rules:
+    # Documentation — enforces /// comments on public symbols
+    public_member_api_docs: true
+
+    # Code quality
+    always_declare_return_types: true
+    avoid_dynamic_calls: true
+    avoid_print: true               # use proper logging
+    avoid_relative_lib_imports: true
+    cancel_subscriptions: true
+    close_sinks: true
+    directives_ordering: true
+    literal_only_boolean_expressions: true
+    no_duplicate_case_values: true
+    prefer_const_constructors: true
+    prefer_final_fields: true
+    prefer_final_locals: true
+    throw_in_finally: true
+    unnecessary_statements: true
+    unrelated_type_equality_checks: true
+    use_key_in_widget_constructors: true
+    valid_regexps: true
+
+    # Style
+    prefer_single_quotes: true
+    require_trailing_commas: true

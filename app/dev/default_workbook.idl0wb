@@ -1,0 +1,802 @@
+{
+  "workbook_id": "default-analysis-v1",
+  "name": "Default Analysis",
+  "workbook_version": 1,
+  "created_at_ms": 1767225600000,
+  "updated_at_ms": 1782345600000,
+  "math_channels": [
+    {
+      "name": "Frame accel declipped",
+      "expression": "declip([IMU0_AccelZ])",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFFFC107"
+    },
+    {
+      "name": "Fork accel declipped",
+      "expression": "declip([IMU1_AccelX])",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF00BCD4"
+    },
+    {
+      "name": "Shock accel declipped",
+      "expression": "declip([IMU2_AccelY])",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF8BC34A"
+    },
+    {
+      "name": "Front axle vert accel",
+      "expression": "[IMU0_AccelZ] + 0.835 * differentiate([IMU0_GyroY] * 0.0174533) / 9.81",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF7E57C2"
+    },
+    {
+      "name": "Rear axle vert accel",
+      "expression": "[IMU0_AccelZ] - 0.445 * differentiate([IMU0_GyroY] * 0.0174533) / 9.81",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFEC407A"
+    },
+    {
+      "name": "Fork rel accel",
+      "expression": "([Fork accel declipped] - [Front axle vert accel]) * g",
+      "quantity": "Acceleration",
+      "units": "m/s^2",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF90CAF9"
+    },
+    {
+      "name": "Shock rel accel",
+      "expression": "([Shock accel declipped] - [Rear axle vert accel]) * g",
+      "quantity": "Acceleration",
+      "units": "m/s^2",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFA5D6A7"
+    },
+    {
+      "name": "Fork vel raw",
+      "expression": "integrate(butter(2, 0.2, \"high\", [Fork rel accel]))",
+      "quantity": "Velocity",
+      "units": "m/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#80FF2196F3"
+    },
+    {
+      "name": "Shock vel raw",
+      "expression": "integrate(butter(2, 0.2, \"high\", [Shock rel accel]))",
+      "quantity": "Velocity",
+      "units": "m/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#804CAF50"
+    },
+    {
+      "name": "Fork velocity",
+      "expression": "detrend([Fork vel raw])",
+      "quantity": "Velocity",
+      "units": "m/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF2196F3"
+    },
+    {
+      "name": "Shock velocity",
+      "expression": "detrend([Shock vel raw])",
+      "quantity": "Velocity",
+      "units": "m/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF4CAF50"
+    },
+    {
+      "name": "Fork travel",
+      "expression": "detrend(integrate([Fork velocity]))",
+      "quantity": "Position",
+      "units": "m",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFFF9800"
+    },
+    {
+      "name": "Shock travel",
+      "expression": "detrend(integrate([Shock velocity]))",
+      "quantity": "Position",
+      "units": "m",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFE91E63"
+    },
+    {
+      "name": "Frame |accel|",
+      "expression": "norm(vec([IMU0_AccelX],[IMU0_AccelY],[IMU0_AccelZ]))",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFFFFFFF"
+    },
+    {
+      "name": "Cumulative pitch",
+      "expression": "integrate([IMU0_GyroY])",
+      "quantity": "Angle",
+      "units": "deg",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFFFC107"
+    },
+    {
+      "name": "Pitch ang accel",
+      "expression": "differentiate(deg2rad([IMU0_GyroY]))",
+      "quantity": "AngularAccel",
+      "units": "rad/s^2",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFBA68C8"
+    },
+    {
+      "name": "Centripetal est",
+      "expression": "{r_cent} * deg2rad([IMU0_GyroY]) * deg2rad([IMU0_GyroY])",
+      "quantity": "Acceleration",
+      "units": "m/s^2",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFFF7043"
+    },
+    {
+      "name": "Frame vert aligned",
+      "expression": "dot(vec([IMU0_AccelX],[IMU0_AccelY],[IMU0_AccelZ]), normalize(vec({g0x},{g0y},{g0z})))",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFE0E0E0"
+    },
+    {
+      "name": "Fork |accel|",
+      "expression": "norm(vec([IMU1_AccelX],[IMU1_AccelY],0))",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF2196F3"
+    },
+    {
+      "name": "Shock |accel|",
+      "expression": "norm(vec([IMU2_AccelX],[IMU2_AccelY],0))",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF4CAF50"
+    },
+    {
+      "name": "Fork vert aligned",
+      "expression": "dot(vec([IMU1_AccelX],[IMU1_AccelY],0), normalize(vec({g1x},{g1y},{g1z})))",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF64B5F6"
+    },
+    {
+      "name": "Shock vert aligned",
+      "expression": "dot(vec([IMU2_AccelX],[IMU2_AccelY],0), normalize(vec({g2x},{g2y},{g2z})))",
+      "quantity": "Acceleration",
+      "units": "g",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FF81C784"
+    },
+    {
+      "name": "Cumulative pitch (detr)",
+      "expression": "detrend(integrate([IMU0_GyroY]))",
+      "quantity": "Angle",
+      "units": "deg",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 3,
+      "color": "#FFFF7043"
+    },
+    {
+      "name": "Front travel (mm)",
+      "expression": "wheel_travel(\"front\")",
+      "quantity": "suspension",
+      "units": "mm",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 1,
+      "color": "#FF4FC3F7"
+    },
+    {
+      "name": "Front velocity (mm/s)",
+      "expression": "wheel_velocity(\"front\")",
+      "quantity": "suspension",
+      "units": "mm/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 0,
+      "color": "#FF29B6F6"
+    },
+    {
+      "name": "Rear travel (mm)",
+      "expression": "wheel_travel(\"rear\")",
+      "quantity": "suspension",
+      "units": "mm",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 1,
+      "color": "#FFFFB74D"
+    },
+    {
+      "name": "Rear velocity (mm/s)",
+      "expression": "wheel_velocity(\"rear\")",
+      "quantity": "suspension",
+      "units": "mm/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 0,
+      "color": "#FFFF9800"
+    },
+    {
+      "name": "Fork velocity (mm/s)",
+      "expression": "[Fork velocity] * 1000",
+      "quantity": "suspension",
+      "units": "mm/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 0,
+      "color": "#FF7E57C2"
+    },
+    {
+      "name": "Shock velocity (mm/s)",
+      "expression": "[Shock velocity] * 1000",
+      "quantity": "suspension",
+      "units": "mm/s",
+      "sample_rate_hz": 0.0,
+      "decimal_places": 0,
+      "color": "#FF26A69A"
+    }
+  ],
+  "worksheets": [
+    {
+      "id": "ws-session",
+      "name": "Session",
+      "xAxisMode": "time",
+      "kind": "sessionSheet",
+      "charts": [
+        {
+          "slotId": "slot-session-gpsmap",
+          "chartType": "gpsMap",
+          "channelIds": [],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.5,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "Track map"
+        },
+        {
+          "slotId": "slot-session-laptable",
+          "chartType": "lapTable",
+          "channelIds": [],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "Lap times"
+        },
+        {
+          "slotId": "slot-session-lapprogression",
+          "chartType": "lapProgression",
+          "channelIds": [],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "Lap progression"
+        }
+      ]
+    },
+    {
+      "id": "ws-bike",
+      "name": "Bike",
+      "xAxisMode": "time",
+      "charts": [
+        {
+          "slotId": "slot-bike-speed",
+          "chartType": "timeSeries",
+          "channelIds": [
+            "GPS_SpeedKmh"
+          ],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "title": "GPS speed"
+        },
+        {
+          "slotId": "slot-bike-sprung",
+          "chartType": "timeSeries",
+          "channelIds": [
+            "IMU0_AccelZ"
+          ],
+          "mathChannelIds": [
+            "Frame accel declipped"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Sprung-mass vertical accel \u2014 raw + declipped (frame)"
+        },
+        {
+          "slotId": "slot-bike-axle",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": [
+            "Front axle vert accel",
+            "Rear axle vert accel"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Frame vertical accel at front + rear axle (pitch)"
+        }
+      ]
+    },
+    {
+      "id": "ws-suspension",
+      "name": "Suspension",
+      "xAxisMode": "time",
+      "charts": [
+        {
+          "slotId": "slot-susp-accel",
+          "chartType": "timeSeries",
+          "channelIds": [
+            "IMU1_AccelX",
+            "IMU2_AccelY"
+          ],
+          "mathChannelIds": [
+            "Fork accel declipped",
+            "Shock accel declipped"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Fork + shock vertical accel \u2014 raw + declipped"
+        },
+        {
+          "slotId": "slot-susp-velocity",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": [
+            "Fork velocity",
+            "Shock velocity"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Fork + shock velocity"
+        },
+        {
+          "slotId": "slot-susp-travel",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": [
+            "Fork travel",
+            "Shock travel"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Fork + shock travel"
+        },
+        {
+          "slotId": "slot-susp-velocity-hist",
+          "chartType": "histogram",
+          "channelIds": [],
+          "mathChannelIds": [
+            "Fork velocity",
+            "Shock velocity"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "histogramBinCount": 40,
+          "histogramSymmetric": true,
+          "title": "Suspension velocity distribution"
+        },
+        {
+          "slotId": "slot-susp-est-travel",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": ["Front travel (mm)", "Rear travel (mm)"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Front + rear wheel travel (geometry estimator, mm)"
+        },
+        {
+          "slotId": "slot-susp-est-velocity",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": ["Front velocity (mm/s)", "Rear velocity (mm/s)"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Front + rear wheel velocity (geometry estimator, mm/s)"
+        },
+        {
+          "slotId": "slot-susp-front-vel-compare-hist",
+          "chartType": "histogram",
+          "channelIds": [],
+          "mathChannelIds": ["Fork velocity (mm/s)", "Front velocity (mm/s)"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "histogramBinCount": 60,
+          "histogramSymmetric": true,
+          "title": "Front velocity distribution — filtered (DSP, purple) vs estimator (blue)"
+        },
+        {
+          "slotId": "slot-susp-rear-vel-compare-hist",
+          "chartType": "histogram",
+          "channelIds": [],
+          "mathChannelIds": ["Shock velocity (mm/s)", "Rear velocity (mm/s)"],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "histogramBinCount": 60,
+          "histogramSymmetric": true,
+          "title": "Rear velocity distribution — filtered (DSP, teal) vs estimator (orange)"
+        }
+      ]
+    },
+    {
+      "id": "ws-airborne",
+      "name": "Airborne diag",
+      "xAxisMode": "time",
+      "charts": [
+        {
+          "slotId": "slot-gmag",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": [
+            "Frame |accel|",
+            "Fork |accel|",
+            "Shock |accel|"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Frame |accel| \u2014 ~1.00g ground, \u21920 airborne"
+        },
+        {
+          "slotId": "slot-relzoom",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": [
+            "Fork rel accel",
+            "Shock rel accel"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Relative accel (auto-Y; zoom X to the jump: offset vs zero)"
+        },
+        {
+          "slotId": "slot-cent",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": [
+            "Fork rel accel",
+            "Shock rel accel",
+            "Centripetal est"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Rel accel vs centripetal est (zoom X to jump)"
+        },
+        {
+          "slotId": "slot-pitch",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": [
+            "Cumulative pitch",
+            "Cumulative pitch (detr)"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Cumulative pitch \u2014 raw (bias ramp) vs detrended (zoom jump, read ~45\u00b0)"
+        },
+        {
+          "slotId": "slot-velcheck",
+          "chartType": "timeSeries",
+          "channelIds": [],
+          "mathChannelIds": [
+            "Fork vel raw",
+            "Fork velocity",
+            "Shock vel raw",
+            "Shock velocity"
+          ],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Velocity raw vs detrended \u2014 slope shape in air"
+        }
+      ]
+    },
+    {
+      "id": "ws-gravcal",
+      "name": "Gravity cal",
+      "xAxisMode": "time",
+      "blocks": [
+        {
+          "id": "blk-caltable",
+          "placement": "inFlow",
+          "content": {
+            "kind": "table",
+            "table": {
+              "columns": [
+                {
+                  "id": "imu",
+                  "name": "IMU #"
+                },
+                {
+                  "id": "gx",
+                  "name": "med Ax (g)"
+                },
+                {
+                  "id": "gy",
+                  "name": "med Ay (g)"
+                },
+                {
+                  "id": "gz",
+                  "name": "med Az (g)"
+                },
+                {
+                  "id": "gmag",
+                  "name": "|g| (~1.00)"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "r0"
+                },
+                {
+                  "id": "r1"
+                },
+                {
+                  "id": "r2"
+                }
+              ],
+              "cells": [
+                [
+                  {
+                    "literal": 0
+                  },
+                  {
+                    "formula": "median([IMU0_AccelX])"
+                  },
+                  {
+                    "formula": "median([IMU0_AccelY])"
+                  },
+                  {
+                    "formula": "median([IMU0_AccelZ])"
+                  },
+                  {
+                    "formula": "norm(vec(median([IMU0_AccelX]),median([IMU0_AccelY]),median([IMU0_AccelZ])))"
+                  }
+                ],
+                [
+                  {
+                    "literal": 1
+                  },
+                  {
+                    "formula": "median([IMU1_AccelX])"
+                  },
+                  {
+                    "formula": "median([IMU1_AccelY])"
+                  },
+                  {},
+                  {
+                    "formula": "sqrt(median([IMU1_AccelX])*median([IMU1_AccelX]) + median([IMU1_AccelY])*median([IMU1_AccelY]))"
+                  }
+                ],
+                [
+                  {
+                    "literal": 2
+                  },
+                  {
+                    "formula": "median([IMU2_AccelX])"
+                  },
+                  {
+                    "formula": "median([IMU2_AccelY])"
+                  },
+                  {},
+                  {
+                    "formula": "sqrt(median([IMU2_AccelX])*median([IMU2_AccelX]) + median([IMU2_AccelY])*median([IMU2_AccelY]))"
+                  }
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "id": "blk-aligned",
+          "placement": "inFlow",
+          "content": {
+            "kind": "chart",
+            "slot": {
+              "slotId": "slot-aligned",
+              "chartType": "timeSeries",
+              "channelIds": [],
+              "mathChannelIds": [
+                "Frame vert aligned",
+                "Fork vert aligned",
+                "Shock vert aligned"
+              ],
+              "yScaleMode": "auto",
+              "heightFactor": 1.0,
+              "channelColors": {},
+              "scope": "auto",
+              "showZeroLine": true,
+              "title": "Frame vert aligned vs IMU0_AccelZ (diverge once measured g entered)"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ws-frequencies",
+      "name": "Frequencies",
+      "xAxisMode": "time",
+      "charts": [
+        {
+          "slotId": "slot-freq-fork",
+          "chartType": "fft",
+          "channelIds": [
+            "IMU1_AccelX"
+          ],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "fftWindow": "hann",
+          "fftXScale": "log",
+          "fftOverlapPercent": 50.0,
+          "fftDetrend": "mean",
+          "fftAveraging": "mean",
+          "fftScaling": "magnitude",
+          "fftYScale": "linear",
+          "title": "Fork resonance (FFT)"
+        },
+        {
+          "slotId": "slot-freq-shock",
+          "chartType": "fft",
+          "channelIds": [
+            "IMU2_AccelY"
+          ],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "fftWindow": "hann",
+          "fftXScale": "log",
+          "fftOverlapPercent": 50.0,
+          "fftDetrend": "mean",
+          "fftAveraging": "mean",
+          "fftScaling": "magnitude",
+          "fftYScale": "linear",
+          "title": "Shock resonance (FFT)"
+        }
+      ]
+    },
+    {
+      "id": "ws-rider-inputs",
+      "name": "Rider inputs",
+      "xAxisMode": "time",
+      "charts": [
+        {
+          "slotId": "slot-rider-placeholder",
+          "chartType": "timeSeries",
+          "channelIds": [
+            "IMU0_GyroZ"
+          ],
+          "mathChannelIds": [],
+          "yScaleMode": "auto",
+          "heightFactor": 1.0,
+          "channelColors": {},
+          "scope": "auto",
+          "showZeroLine": true,
+          "title": "Frame yaw rate (placeholder \u2014 steering/understeer math is future work)"
+        }
+      ]
+    }
+  ],
+  "constants": [
+    {
+      "name": "g0x",
+      "value": 0.0
+    },
+    {
+      "name": "g0y",
+      "value": 0.0
+    },
+    {
+      "name": "g0z",
+      "value": 1.0
+    },
+    {
+      "name": "g1x",
+      "value": 1.0
+    },
+    {
+      "name": "g1y",
+      "value": 0.0
+    },
+    {
+      "name": "g1z",
+      "value": 0.0
+    },
+    {
+      "name": "g2x",
+      "value": 0.0
+    },
+    {
+      "name": "g2y",
+      "value": 1.0
+    },
+    {
+      "name": "g2z",
+      "value": 0.0
+    },
+    {
+      "name": "r_cent",
+      "value": 0.3
+    }
+  ]
+}

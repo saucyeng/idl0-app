@@ -1,0 +1,92 @@
+name: idl0
+description: IDL0 mountain bike data acquisition companion app
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # BLE
+  flutter_blue_plus: ^1.35.3
+
+  # Database
+  sqflite: ^2.3.3
+  sqflite_common_ffi: ^2.3.4   # desktop (Windows/Linux/macOS) FFI backend
+  path: ^1.9.0
+
+  # File handling
+  file_picker: ^8.0.3
+  path_provider: ^2.1.3
+
+  # Google Drive / auth
+  google_sign_in: ^6.2.1
+  googleapis: ^12.0.0
+  http: ^1.2.1
+
+  # Rust bridge
+  flutter_rust_bridge: ^2.0.0
+  rust_lib_idl0:
+    path: rust_builder
+
+  # DSP
+  fftea: ^1.3.0
+
+  # Adaptive UI
+  flutter_adaptive_scaffold: ^0.2.1
+
+  # Permissions
+  permission_handler: ^11.3.1
+
+  # Maps — flutter_map renders OSM-style raster tiles via Leaflet-compatible
+  # URL templates. No API key, no Google Play Services dependency, free tile
+  # usage. latlong2 supplies the LatLng type that flutter_map APIs consume.
+  flutter_map: ^7.0.2
+  flutter_map_dragmarker: ^7.0.0
+  latlong2: ^0.9.1
+
+  # Charts — TBD, evaluate fl_chart vs syncfusion
+  fl_chart: ^0.69.0
+
+  # Utilities
+  uuid: ^4.4.0
+  crypto: ^3.0.3         # CRC32 for config checksum
+  crclib: ^3.0.0         # CRC-32/ISO-HDLC for binary header config_crc32 verification (§5.1)
+  intl: ^0.19.0
+  xml: ^6.5.0            # GPX (Garmin/Strava) import — pure-Dart XML parser
+  pub_semver: ^2.1.4    # semantic-version compare for firmware OTA update checks (§27.7)
+
+  # Persistence
+  shared_preferences: ^2.3.0
+
+  # Markdown rendering
+  flutter_markdown: ^0.7.3
+
+  # Typography — Tourney (display) + IBM Plex Mono (UI/body)
+  google_fonts: ^6.2.1
+
+  # URL launching
+  url_launcher: ^6.3.0
+  super_drag_and_drop: ^0.9.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  mockito: ^5.4.4
+  path_provider_platform_interface: any
+  plugin_platform_interface: any
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/howtos/
