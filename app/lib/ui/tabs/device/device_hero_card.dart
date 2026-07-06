@@ -275,9 +275,9 @@ class _PeripheralReadout extends StatelessWidget {
 
   // TODO(idl0): surface richer per-peripheral status once the firmware §7.3
   // status string carries it — GPS fix-type (2D/3D) + satellite count, SD free
-  // space, BLE signal RSSI, firmware version. Each entry already renders as a
-  // (label, value, colour) triple, so a longer value (e.g. "3D · 9 sat") slots
-  // in with no layout change; add the fields to DeviceState then map them here.
+  // space, BLE signal RSSI. Each entry already renders as a (label, value,
+  // colour) triple, so a longer value (e.g. "3D · 9 sat") slots in with no
+  // layout change; add the fields to DeviceState then map them here.
 
   @override
   Widget build(BuildContext context) {
@@ -304,6 +304,16 @@ class _PeripheralReadout extends StatelessWidget {
             label: 'HRM',
             value: '${device.hrBatteryPercent}%',
             color: _pct(device.hrBatteryPercent!),
+          ),
+        // Neutral presentation — a firmware version is not a health state,
+        // so no green/red semantics; brandFg is the same "plain value"
+        // colour StatusIcon uses for unmatched-but-present states above.
+        if (device.firmwareVersion != null)
+          StatusIcon(
+            icon: Icons.memory,
+            label: 'FW',
+            value: 'v${device.firmwareVersion}',
+            color: brandFg,
           ),
       ],
     );
