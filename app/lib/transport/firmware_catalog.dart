@@ -12,8 +12,15 @@ import '../data/exceptions.dart';
 
 /// GitHub `owner/repo` slug the app pulls firmware releases from.
 ///
-/// Placeholder until the firmware repo is split out under the `saucyeng`
-/// org (design §3/§4). Changing the firmware host is a one-line edit here.
+/// Points at the split-out `idl0-firmware` repo (design §3/§4). Releases are
+/// produced by that repo's `.github/workflows/firmware-release.yml` on `v*`
+/// tags and must publish exactly ONE `.bin` asset per release, named
+/// `idl0-firmware-v<ver>.bin` — [GitHubReleasesCatalog._toRelease] takes the
+/// *last* `.bin`-suffixed asset it sees, so a second `.bin` silently wins
+/// over the first. An optional `<name>.sha256` sidecar may accompany it, in
+/// `sha256sum` output format (`<hex>  <filename>`); only the first
+/// whitespace-delimited token is parsed as the expected digest. Changing the
+/// firmware host is a one-line edit here.
 const String kFirmwareRepoSlug = 'saucyeng/idl0-firmware';
 
 /// Release channel the user follows; maps onto the GitHub prerelease flag.

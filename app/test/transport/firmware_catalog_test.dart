@@ -55,9 +55,14 @@ void main() {
       expect(rel.sizeBytes, equals(1024));
     });
 
-    test('default repo slug is the saucyeng placeholder', () {
-      expect(kFirmwareRepoSlug, equals('saucyeng/idl0-firmware'));
-    });
+    test(
+      'kFirmwareRepoSlug — firmware repo split is complete — points at '
+      'saucyeng/idl0-firmware',
+      () {
+        // Assert
+        expect(kFirmwareRepoSlug, equals('saucyeng/idl0-firmware'));
+      },
+    );
   });
 
   group('GitHubReleasesCatalog.latest', () {
@@ -129,6 +134,51 @@ void main() {
       // Act / Assert
       expect(await catalog.latest(FirmwareChannel.stable), isNull);
     });
+
+    test(
+      'latest — versioned asset names idl0-firmware-v0.1.0.bin and '
+      '.bin.sha256 — parses bin and sha URLs',
+      () async {
+        // Arrange
+        final release = jsonEncode({
+          'tag_name': 'v0.1.0',
+          'prerelease': false,
+          'draft': false,
+          'body': 'notes for v0.1.0',
+          'assets': [
+            {
+              'name': 'idl0-firmware-v0.1.0.bin',
+              'size': 4096,
+              'browser_download_url':
+                  'https://dl/v0.1.0/idl0-firmware-v0.1.0.bin',
+            },
+            {
+              'name': 'idl0-firmware-v0.1.0.bin.sha256',
+              'size': 90,
+              'browser_download_url':
+                  'https://dl/v0.1.0/idl0-firmware-v0.1.0.bin.sha256',
+            },
+          ],
+        });
+        final client = MockClient((_) async => http.Response(release, 200));
+        final catalog = GitHubReleasesCatalog(client, slug: 'o/r');
+
+        // Act
+        final rel = await catalog.latest(FirmwareChannel.stable);
+
+        // Assert
+        expect(
+          rel!.binUrl,
+          equals(Uri.parse('https://dl/v0.1.0/idl0-firmware-v0.1.0.bin')),
+        );
+        expect(
+          rel.sha256Url,
+          equals(
+            Uri.parse('https://dl/v0.1.0/idl0-firmware-v0.1.0.bin.sha256'),
+          ),
+        );
+      },
+    );
 
     test('throws FirmwareCatalogException on a 500', () async {
       // Arrange
