@@ -77,5 +77,35 @@ void main() {
       expect(s.phase, equals(WifiBindPhase.failed));
       expect(s.error, contains('no AP'));
     });
+
+    test(
+        'OTA reboot — BLE link-loss while bound resets DeviceState to '
+        'defaults — exactly one release, no dangling bind', () async {
+      // Arrange — firmware reports the AP up (as it does while serving
+      // POST /ota), so the controller binds.
+      ble.statusController.add(DeviceStatus.fromString('WiFi: ON'));
+      await _settle();
+      expect(wifi.bindCalls, equals(1));
+      expect(
+        container.read(wifiBindControllerProvider).phase,
+        equals(WifiBindPhase.bound),
+      );
+
+      // Act — the device's esp_restart() after accepting the OTA image
+      // drops the BLE link before any further status frame arrives;
+      // DeviceNotifier's link-loss handler resets DeviceState to its
+      // defaults (wifiOn: false), which is Mode.idle.
+      ble.simulateConnectionLoss();
+      await _settle();
+
+      // Assert — released exactly once, no re-bind snuck in, and the
+      // controller has followed the mode back to idle.
+      expect(wifi.releaseCalls, equals(1));
+      expect(wifi.bindCalls, equals(1));
+      expect(
+        container.read(wifiBindControllerProvider).phase,
+        equals(WifiBindPhase.idle),
+      );
+    });
   });
 }

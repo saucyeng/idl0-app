@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -35,6 +37,32 @@ class _SpyBinder extends WifiNetworkBinder {
       throw const DeviceUnreachableException('bind rejected for test');
     }
   }
+
+  @override
+  Future<void> release() async => _calls.add('release');
+
+  /// Ordered log of calls made so far.
+  List<String> get callLog => List.unmodifiable(_calls);
+}
+
+/// Spy [WifiNetworkBinder] that also reports a fixed [deviceBaseUrl].
+///
+/// [pushFirmware] builds its own [http.Client]/[WifiTransfer] rather than
+/// going through the injectable `transferFactory` (see class doc on
+/// [RealWifiService.pushFirmware]), so its tests need a binder that both
+/// points at a real local server (via [deviceBaseUrl]) and records whether
+/// bind/release were ever touched.
+class _SpyUrlBinder extends WifiNetworkBinder {
+  _SpyUrlBinder(this._url) : super(isAndroidPlatform: false);
+
+  final String _url;
+  final _calls = <String>[];
+
+  @override
+  String get deviceBaseUrl => _url;
+
+  @override
+  Future<void> bind(String ssid, String password) async => _calls.add('bind');
 
   @override
   Future<void> release() async => _calls.add('release');
@@ -366,6 +394,76 @@ void main() {
         reason: 'expected mid-download progress, got $progress',
       );
       expect(progress.last, closeTo(1.0, 0.001));
+    });
+  });
+
+  group('RealWifiService.pushFirmware —', () {
+    // pushFirmware (unlike getFileList/downloadFile/pushConfig) builds its
+    // own http.Client/WifiTransfer per call instead of going through the
+    // injectable transferFactory (see class doc), so a MockClient can't be
+    // wired in here — these tests stand up a real loopback HttpServer as
+    // the device stand-in.
+    late HttpServer server;
+
+    tearDown(() async {
+      await server.close(force: true);
+    });
+
+    test('success — does NOT touch the binder (panel owns the bind lifecycle)',
+        () async {
+      // Arrange — a loopback server that accepts the /ota upload and
+      // acknowledges it, mirroring the device's 200 "ok\n" response.
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        await request.drain<void>();
+        request.response.statusCode = 200;
+        request.response.write('ok\n');
+        await request.response.close();
+      });
+      final binder = _SpyUrlBinder('http://127.0.0.1:${server.port}');
+      final service = RealWifiService(deviceName: 'IDL0-A3F2', binder: binder);
+
+      // Act
+      final handle = service.pushFirmware(Uint8List.fromList([1, 2, 3, 4]));
+      await handle.done;
+
+      // Assert — no bind/release; the caller (panel) already owns the bind
+      // for the duration of the OTA push.
+      expect(binder.callLog, isEmpty);
+    });
+
+    test('cancel — closes the dedicated client without touching the binder',
+        () async {
+      // Arrange — a loopback server that receives the /ota upload in full
+      // but never responds, holding the push in the awaiting-response phase
+      // (the realistic window in which a user taps Cancel: the request is
+      // established and in flight). cancel() must force the dedicated
+      // client shut; nothing else can settle handle.done here.
+      final uploadReceived = Completer<void>();
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        await request.drain<void>();
+        uploadReceived.complete();
+        // Deliberately never respond — only cancel() can settle the push.
+      });
+      final binder = _SpyUrlBinder('http://127.0.0.1:${server.port}');
+      final service = RealWifiService(deviceName: 'IDL0-A3F2', binder: binder);
+
+      // Act — start the push, wait until the device stand-in has the bytes
+      // (push in flight, awaiting the device's response), then cancel.
+      final handle =
+          service.pushFirmware(Uint8List.fromList(List.filled(2048, 7)));
+      await uploadReceived.future;
+      await handle.cancel();
+
+      // Assert — closing the dedicated client aborts the in-flight request:
+      // done completes with the doc-promised DeviceUnreachableException
+      // instead of hanging, and the binder is never touched.
+      await expectLater(
+        handle.done,
+        throwsA(isA<DeviceUnreachableException>()),
+      );
+      expect(binder.callLog, isEmpty);
     });
   });
 }
