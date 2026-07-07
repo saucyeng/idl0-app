@@ -35,6 +35,16 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
       IDF v6 (build warning, harmless) — clean up alongside the next defaults
       change.
 
+- [ ] **Two pre-existing chart_workspace_test failures (2026-07-07)** —
+      `ChartWorkspace — "Add Chart" button — increases TimeSeriesChart count`
+      and `_ChannelPickerDialog — math channels exist — shows Math Channels
+      section` fail deterministically (also in isolation): a `tap()` finder
+      hits two `Text("ADD CHANNEL")` widgets — the workspace renders a
+      duplicate add-channel affordance somewhere. Unrelated to the OTA sprint
+      (no sprint commit touches chart/maths files; test imports none of the
+      changed helpers). Diagnose whether the duplicate widget is a UI
+      regression or the tests need disambiguated finders.
+
 - [ ] **Cosmetic follow-ups from the sprint's final review (2026-07-07)** —
       unify the firmware repo's spec-citation comment phrasing to the
       `IDL0_SPEC.md §N` form `docs/README.md` documents (a few files use
