@@ -108,6 +108,12 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
   String? _errorMessage;
   bool _userCanceled = false;
 
+  /// Version (no leading `v`) of the release currently queued for push, when
+  /// known — i.e. the user accepted a catalog [FirmwareRelease] via
+  /// [_downloadAndPush]. Null for a manually-picked `.bin` (no known
+  /// version), which never arms the post-reboot OTA auto-confirm. See §27.7.
+  String? _pushedVersion;
+
   @override
   void initState() {
     super.initState();
@@ -138,6 +144,8 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
       _sentBytes = 0;
       _totalBytes = release.sizeBytes;
       _errorMessage = null;
+      // Known version — arms the post-reboot OTA auto-confirm in _push().
+      _pushedVersion = release.version.toString();
     });
     final Uint8List bytes;
     try {
@@ -174,9 +182,16 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
     final picker = widget.pickerOverride ?? _defaultFirmwarePicker;
     final picked = await picker();
     if (!mounted || picked == null) return;
+    // A manual .bin pick abandons any pending catalog-driven expectation —
+    // disarm now so a stale armed version (from an earlier accepted catalog
+    // update that hasn't rebooted yet) can't be evaluated against this
+    // unrelated image's post-reboot status frame. See §27.7.
+    ref.read(deviceProvider.notifier).disarmOtaAutoConfirm();
     setState(() {
       _picked = picked;
       _errorMessage = null;
+      // Manual .bin picks carry no known version — never arm auto-confirm.
+      _pushedVersion = null;
     });
   }
 
@@ -235,6 +250,16 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
       _activeHandle = null;
 
       if (!mounted) return;
+      // Arm the post-reboot OTA auto-confirm before the reconnect timer
+      // fires — only when the pushed version is known (catalog releases;
+      // never a manual .bin pick). See §27.7. If the section was disposed
+      // mid-push we return above without arming: `ref` is unusable after
+      // dispose, no reconnect timer runs either, and the manual
+      // pending-verify card stays the fallback.
+      final pushedVersion = _pushedVersion;
+      if (pushedVersion != null) {
+        ref.read(deviceProvider.notifier).armOtaAutoConfirm(pushedVersion);
+      }
       setState(() {
         _phase = _PushPhase.rebooting;
       });
@@ -627,6 +652,20 @@ class _UpdateControls extends ConsumerWidget {
                   onPressed: () => onUpdate(update.release),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ] else if (update is FirmwareAheadOfChannel) ...[
+          // Informational only — §27.7: a channel switch (or a beta image
+          // while following stable) that leaves the device ahead of the
+          // channel is never a downgrade prompt. No action button.
+          NoteBlock(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Text(
+              'Device firmware v${update.current} is ahead of the '
+              '${settings.firmwareChannel.name} channel '
+              '(latest v${update.release.version}); no action needed.',
+              style: const TextStyle(fontSize: 12, color: brandFgDim),
             ),
           ),
           const SizedBox(height: 12),

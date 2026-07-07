@@ -35,9 +35,9 @@ class DeviceState {
 
   // TODO(idl0): richer per-peripheral status (hardware-gated). Once the §7.3
   // status string carries them, add fields here — GPS fix-type (2D/3D) +
-  // satellite count, SD free space, BLE signal RSSI, firmware version — and map
-  // them in the hero's _PeripheralReadout (already structured to show a longer
-  // value, e.g. "GPS 3D · 9 sat", with no layout change).
+  // satellite count, SD free space, BLE signal RSSI — and map them in the
+  // hero's _PeripheralReadout (already structured to show a longer value,
+  // e.g. "GPS 3D · 9 sat", with no layout change).
 
   /// Last-reported SD state: `OK` | `FULL` | `ERROR` | `ABSENT`. See §7.3.
   /// Null when not yet reported by the device.
@@ -135,8 +135,43 @@ class DeviceNotifier extends Notifier<DeviceState> {
   /// disconnected state without waiting for the next failed command.
   StreamSubscription<void>? _connectionLostSub;
 
+  /// One-shot OTA auto-confirm expectation, armed by [armOtaAutoConfirm].
+  ///
+  /// Holds the pushed firmware version (no leading `v`) the next
+  /// version-bearing status frame is compared against, or null when no
+  /// auto-confirm is armed. See §27.7.
+  String? _armedOtaVersion;
+
   @override
   DeviceState build() => const DeviceState();
+
+  /// Arms a one-shot expectation that the device will reconnect running
+  /// [version] (no leading `v`, e.g. `1.5.0`) after an OTA push + reboot.
+  ///
+  /// The first version-bearing status frame received **after the reconnect
+  /// completes** (i.e. once [DeviceState.isConnected] is true — see
+  /// [_onStatus]) disarms this expectation, whether or not it matches. If
+  /// it matches and the frame also reports [DeviceState.otaPendingVerify],
+  /// [confirmOta] fires automatically so the just-pushed image is committed
+  /// before the bootloader's rollback-on-reboot window can revert it. A
+  /// version-bearing frame arriving before the reconnect completes (the
+  /// GATT-handshake frame — see [connect]) is ignored entirely: it neither
+  /// consumes nor evaluates the arm. See §27.7.
+  void armOtaAutoConfirm(String version) {
+    _armedOtaVersion = version;
+  }
+
+  /// Cancels a pending [armOtaAutoConfirm] expectation without waiting for
+  /// the next status frame.
+  ///
+  /// Called from the manual `.bin` file-picker flow (`FirmwareUpdateSection
+  /// ._pickFile`) — picking a file to push abandons any expectation armed
+  /// by an earlier catalog-driven update, so a stale armed version can't be
+  /// evaluated against this unrelated image's post-reboot status frame. See
+  /// §27.7.
+  void disarmOtaAutoConfirm() {
+    _armedOtaVersion = null;
+  }
 
   /// Scans for and connects to the nearest IDL0 device.
   ///
@@ -183,7 +218,33 @@ class DeviceNotifier extends Notifier<DeviceState> {
   }
 
   /// Folds a device-pushed [DeviceStatus] into [DeviceState].
+  ///
+  /// Also services the [armOtaAutoConfirm] one-shot expectation, gated on
+  /// [DeviceState.isConnected]: the first version-bearing frame seen while
+  /// armed **and connected** disarms it unconditionally (a rolled-back
+  /// device reports its old version and must never auto-commit a stale
+  /// expectation), then — only if that version matches the armed value and
+  /// the frame reports [DeviceState.otaPendingVerify] — fires [confirmOta]
+  /// via [_autoConfirmOta].
+  ///
+  /// The `isConnected` gate matters because [connect] subscribes to
+  /// [BleService.statusStream] before awaiting `service.connect()`, so the
+  /// very first frame — pushed during the GATT handshake, before
+  /// `isConnected` flips true — always carries the post-reboot device's
+  /// `Firmware:` + `OTA: PENDING_VERIFY` state. Evaluating the arm against
+  /// that frame would consume it before the app is actually connected,
+  /// permanently missing the real one-shot opportunity. The firmware's 1 Hz
+  /// status notify delivers a second, connected frame right after, so
+  /// ignoring the handshake frame costs nothing. See §7.3, §27.7.
   void _onStatus(DeviceStatus status) {
+    final armedVersion = _armedOtaVersion;
+    final incomingVersion = status.firmwareVersion;
+    final evaluateOneShot =
+        state.isConnected && armedVersion != null && incomingVersion != null;
+    if (evaluateOneShot) {
+      _armedOtaVersion = null;
+    }
+
     state = state.copyWith(
       batteryPercent: status.batteryPercent,
       isRecording: status.loggingRunning,
@@ -198,6 +259,29 @@ class DeviceNotifier extends Notifier<DeviceState> {
     );
     // Blink the hero's RX chip — a status frame arrived from the device.
     ref.read(linkActivityProvider.notifier).pulseRx();
+
+    if (evaluateOneShot &&
+        incomingVersion == armedVersion &&
+        status.otaPendingVerify) {
+      unawaited(_autoConfirmOta());
+    }
+  }
+
+  /// Fires [confirmOta] from the [_onStatus] auto-confirm hook, catching
+  /// transport failures so a dropped confirm send never rethrows into the
+  /// status-stream listener. On failure, [DeviceState.otaPendingVerify]
+  /// stays true and the manual `_PendingVerifyCard` remains the fallback.
+  /// See §27.7.
+  Future<void> _autoConfirmOta() async {
+    try {
+      await confirmOta();
+    } on TransportException {
+      // Single catch type is sufficient — [BleService]'s methods (confirmOta
+      // included) are documented to throw only TransportException subtypes
+      // (DeviceNotFoundException, CommandRefusedException, etc.), never a
+      // bare Exception or Error. Swallow — the manual commit card stays
+      // visible as the fallback.
+    }
   }
 
   /// Disconnects from the current device and resets all connection state.

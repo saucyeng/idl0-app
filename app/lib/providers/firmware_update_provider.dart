@@ -50,6 +50,24 @@ class FirmwareUpdateAvailable extends FirmwareUpdateState {
   const FirmwareUpdateAvailable(this.current, this.release);
 }
 
+/// The device's running firmware is newer than the latest published build on
+/// the selected channel — e.g. a beta image installed while following
+/// `stable`, or a channel switch to one that has not yet published a build
+/// past what's already on the device.
+///
+/// Informational only — §27.7 requires this never render as a downgrade
+/// prompt. There is no action to take; the device is simply ahead.
+class FirmwareAheadOfChannel extends FirmwareUpdateState {
+  /// The device's current version.
+  final Version current;
+
+  /// The channel's latest published release (older than [current]).
+  final FirmwareRelease release;
+
+  /// Creates a [FirmwareAheadOfChannel] for [current] ahead of [release].
+  const FirmwareAheadOfChannel(this.current, this.release);
+}
+
 /// The check could not complete (offline, device version absent or
 /// unparseable). Non-fatal — the manual push path stays available.
 class FirmwareCheckUnknown extends FirmwareUpdateState {
@@ -93,9 +111,13 @@ class FirmwareUpdateNotifier extends Notifier<FirmwareUpdateState> {
         state = FirmwareUpToDate(current);
         return;
       }
-      state = rel.version > current
-          ? FirmwareUpdateAvailable(current, rel)
-          : FirmwareUpToDate(current);
+      if (rel.version > current) {
+        state = FirmwareUpdateAvailable(current, rel);
+      } else if (rel.version < current) {
+        state = FirmwareAheadOfChannel(current, rel);
+      } else {
+        state = FirmwareUpToDate(current);
+      }
     } on TransportException catch (e) {
       state = FirmwareCheckUnknown(e.message);
     }

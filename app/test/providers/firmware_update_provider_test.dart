@@ -89,6 +89,28 @@ void main() {
     );
   });
 
+  test('check — hosted older than device — FirmwareAheadOfChannel with '
+      'both versions', () async {
+    // Arrange
+    final c = _container(
+      deviceVersion: '1.6.0',
+      connected: true,
+      catalog: _FakeCatalog(result: _rel('1.5.0')),
+    );
+
+    // Act
+    await c.read(firmwareUpdateProvider.notifier).check();
+
+    // Assert
+    final s = c.read(firmwareUpdateProvider);
+    expect(s, isA<FirmwareAheadOfChannel>());
+    expect(
+      (s as FirmwareAheadOfChannel).current,
+      equals(Version.parse('1.6.0')),
+    );
+    expect(s.release.version, equals(Version.parse('1.5.0')));
+  });
+
   test('up to date when hosted equals device', () async {
     // Arrange
     final c = _container(

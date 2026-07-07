@@ -89,4 +89,31 @@ void main() {
     // Assert
     expect(find.textContaining('Firmware update available'), findsNothing);
   });
+
+  testWidgets(
+      'no banner when device is ahead of the channel (§27.7 — informational '
+      'only, never a downgrade prompt)', (tester) async {
+    // Arrange — a NEW sealed state the banner's `is FirmwareUpdateAvailable`
+    // check does not match, so it must stay invisible by construction.
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          deviceProvider.overrideWith(_ConnectedDevice.new),
+          firmwareUpdateProvider.overrideWith(
+            () => _AvailableUpdate(
+              FirmwareAheadOfChannel(
+                Version.parse('1.6.0'),
+                _release('1.5.0'),
+              ),
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: Scaffold(body: DeviceHeroCard())),
+      ),
+    );
+    await tester.pump();
+
+    // Assert
+    expect(find.textContaining('Firmware update available'), findsNothing);
+  });
 }

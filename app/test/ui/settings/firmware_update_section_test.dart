@@ -96,6 +96,16 @@ class _FakeDeviceNotifier extends DeviceNotifier {
   final DeviceState _initialState;
   int reconnectCallCount = 0;
 
+  /// Records the version passed to the most recent [armOtaAutoConfirm]
+  /// call, so tests can assert the section arms auto-confirm with the
+  /// accepted release's version without reaching into the real notifier's
+  /// private armed-state field.
+  String? armedVersion;
+
+  /// Number of times [disarmOtaAutoConfirm] has been called, so tests can
+  /// assert the manual `.bin` pick path abandons any pending expectation.
+  int disarmCallCount = 0;
+
   @override
   DeviceState build() => _initialState;
 
@@ -108,6 +118,18 @@ class _FakeDeviceNotifier extends DeviceNotifier {
   @override
   Future<void> disconnect() async {
     state = const DeviceState();
+  }
+
+  @override
+  void armOtaAutoConfirm(String version) {
+    armedVersion = version;
+    super.armOtaAutoConfirm(version);
+  }
+
+  @override
+  void disarmOtaAutoConfirm() {
+    disarmCallCount++;
+    super.disarmOtaAutoConfirm();
   }
 
   /// Test hook — pushes a new status into state.
@@ -250,6 +272,85 @@ void main() {
       expect(find.byType(SegmentedButton<FirmwareChannel>), findsOneWidget);
       expect(find.text('Check for updates automatically'), findsOneWidget);
     });
+
+    testWidgets(
+        'ahead-of-channel state — informational note renders, no update '
+        'button', (tester) async {
+      // Arrange — device is ahead of the channel's latest published build.
+      final wifi = _SpyWifiService();
+      final ble = MockBleService();
+      const initial = DeviceState(isConnected: true, deviceName: 'IDL0-A3F2');
+      final notifier = _FakeDeviceNotifier(initial);
+      await tester.pumpWidget(
+        _wrap(
+          wifi: wifi,
+          ble: ble,
+          initialDevice: initial,
+          notifier: notifier,
+          updateState: FirmwareAheadOfChannel(
+            Version.parse('1.6.0'),
+            _release('1.5.0'),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Assert — informational note visible, both versions named, and no
+      // update button (§27.7: never a downgrade prompt).
+      expect(
+        find.textContaining('ahead of the stable channel'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('v1.6.0'), findsOneWidget);
+      expect(find.textContaining('v1.5.0'), findsOneWidget);
+      expect(_quietButton('Update to v1.5.0'), findsNothing);
+    });
+
+    testWidgets(
+        'accepting an update — arms OTA auto-confirm with the release '
+        'version', (tester) async {
+      // Arrange — connected and already in WiFi mode so _push doesn't need
+      // to switch modes first; pin an available update to 1.5.0.
+      final wifi = _SpyWifiService();
+      final ble = MockBleService();
+      const initial = DeviceState(
+        isConnected: true,
+        deviceName: 'IDL0-A3F2',
+        wifiOn: true,
+      );
+      final notifier = _FakeDeviceNotifier(initial);
+      await tester.pumpWidget(
+        _wrap(
+          wifi: wifi,
+          ble: ble,
+          initialDevice: initial,
+          notifier: notifier,
+          updateState: FirmwareUpdateAvailable(
+            Version.parse('1.4.0'),
+            _release('1.5.0'),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Act — accept the update: this drives download-then-push through to
+      // the point where the OTA HTTP handle is in flight.
+      await tester.tap(_quietButton('Update to v1.5.0'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 20));
+
+      // Not armed yet — the push hasn't completed.
+      expect(notifier.armedVersion, isNull);
+
+      // Act — resolve the push so _push's success path runs and arms the
+      // auto-confirm before entering the rebooting phase.
+      wifi.pendingDone?.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Assert
+      expect(notifier.armedVersion, equals('1.5.0'));
+    });
   });
 
   group('FirmwareUpdateSection — precondition gate —', () {
@@ -302,6 +403,36 @@ void main() {
   });
 
   group('FirmwareUpdateSection — push flow —', () {
+    testWidgets(
+        'Choose firmware file — disarms any pending OTA auto-confirm '
+        'expectation', (tester) async {
+      // Arrange — connected, no picked file yet. A manual pick must
+      // abandon any expectation armed by an earlier catalog push that
+      // hasn't rebooted yet (§27.7) — this is a plain pick, no push
+      // in-flight, but the call site doesn't distinguish that case.
+      final wifi = _SpyWifiService();
+      final ble = MockBleService();
+      const initial = DeviceState(isConnected: true, deviceName: 'IDL0-A3F2');
+      final notifier = _FakeDeviceNotifier(initial);
+      await tester.pumpWidget(
+        _wrap(
+          wifi: wifi,
+          ble: ble,
+          initialDevice: initial,
+          notifier: notifier,
+          picker: () async => _fakeFirmware(),
+        ),
+      );
+      await tester.pump();
+
+      // Act
+      await tester.tap(_quietButton('Choose firmware file…'));
+      await tester.pumpAndSettle();
+
+      // Assert
+      expect(notifier.disarmCallCount, equals(1));
+    });
+
     testWidgets('Choose then Push — pushFirmware called with file bytes',
         (tester) async {
       // Arrange — connected AND in WiFi mode (Mode.wifi requires wifiOn: true).

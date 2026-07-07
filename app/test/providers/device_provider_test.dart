@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:idl0/providers/device_provider.dart';
+import 'package:idl0/transport/ack.dart';
 import 'package:idl0/transport/ble_service.dart';
 
 import '../helpers/mock_ble_service.dart';
@@ -283,6 +284,212 @@ void main() {
       // Assert
       expect(ok, isFalse);
       expect(container.read(deviceProvider).isConnected, isFalse);
+    });
+  });
+
+  group('DeviceNotifier — OTA auto-confirm (§27.7)', () {
+    ProviderContainer makeContainer(MockBleService mock) {
+      final container = ProviderContainer(
+        overrides: [bleServiceProvider.overrideWithValue(mock)],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test(
+        'armOtaAutoConfirm — version-bearing frame during connect '
+        'handshake — arm survives and no confirm sent', () async {
+      // Arrange — the mock pushes a matching, pending-verify status frame
+      // DURING connect() (before its future resolves), modeling the real
+      // BleConnection ordering: the device's first status notification
+      // arrives on the stream while isConnected is still false.
+      final mock = MockBleService()
+        ..statusDuringConnect =
+            DeviceStatus.fromString('Firmware: 1.5.0\nOTA: PENDING_VERIFY');
+      final container = makeContainer(mock);
+      container.read(deviceProvider.notifier).armOtaAutoConfirm('1.5.0');
+
+      // Act
+      await container.read(deviceProvider.notifier).connect();
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert — the handshake frame's data did land in state (proving it
+      // was really received, matching version + pending), yet no confirm
+      // fired for it — the pre-connect frame must be ignored, not evaluated.
+      final state = container.read(deviceProvider);
+      expect(state.firmwareVersion, equals('1.5.0'));
+      expect(state.otaPendingVerify, isTrue);
+      expect(mock.confirmOtaCallCount, equals(0));
+    });
+
+    test(
+        'armOtaAutoConfirm — handshake frame then post-connect matching '
+        'frame with pending — confirm sent exactly once', () async {
+      // Arrange — the production sequence, end-to-end through the notifier:
+      // a version-bearing frame during the connect handshake (ignored),
+      // followed by the firmware's real 1 Hz post-connect status notify
+      // carrying the same version + pending-verify.
+      final mock = MockBleService()
+        ..statusDuringConnect =
+            DeviceStatus.fromString('Firmware: 1.5.0\nOTA: PENDING_VERIFY');
+      final container = makeContainer(mock);
+      container.read(deviceProvider.notifier).armOtaAutoConfirm('1.5.0');
+
+      // Act
+      await container.read(deviceProvider.notifier).connect();
+      await Future<void>.delayed(Duration.zero);
+      mock.statusController.add(
+        DeviceStatus.fromString('Firmware: 1.5.0\nOTA: PENDING_VERIFY'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert — the arm survived the handshake frame and fired exactly
+      // once, on the first frame received after isConnected flipped true.
+      expect(mock.confirmOtaCallCount, equals(1));
+      expect(container.read(deviceProvider).otaPendingVerify, isFalse);
+    });
+
+    test(
+        'armOtaAutoConfirm — matching version frame + pending — '
+        'confirm sent exactly once and flag cleared', () async {
+      // Arrange
+      final mock = MockBleService();
+      final container = makeContainer(mock);
+      await container.read(deviceProvider.notifier).connect();
+      container.read(deviceProvider.notifier).armOtaAutoConfirm('1.5.0');
+
+      // Act
+      mock.statusController.add(
+        DeviceStatus.fromString('Firmware: 1.5.0\nOTA: PENDING_VERIFY'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert
+      expect(mock.confirmOtaCallCount, equals(1));
+      expect(container.read(deviceProvider).otaPendingVerify, isFalse);
+    });
+
+    test(
+        'armOtaAutoConfirm — repeated matching frames — single confirm',
+        () async {
+      // Arrange
+      final mock = MockBleService();
+      final container = makeContainer(mock);
+      await container.read(deviceProvider.notifier).connect();
+      container.read(deviceProvider.notifier).armOtaAutoConfirm('1.5.0');
+
+      // Act — the device keeps re-emitting the same status while the app
+      // is settled on the pending-verify state.
+      mock.statusController.add(
+        DeviceStatus.fromString('Firmware: 1.5.0\nOTA: PENDING_VERIFY'),
+      );
+      await Future<void>.delayed(Duration.zero);
+      mock.statusController.add(
+        DeviceStatus.fromString('Firmware: 1.5.0\nOTA: PENDING_VERIFY'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert — one-shot: the second frame arrives after disarm.
+      expect(mock.confirmOtaCallCount, equals(1));
+    });
+
+    test(
+        'armOtaAutoConfirm — mismatched version frame — disarms without '
+        'confirm', () async {
+      // Arrange — armed for the pushed version, but the device comes back
+      // reporting its old version (e.g. bootloader rolled back the image).
+      final mock = MockBleService();
+      final container = makeContainer(mock);
+      await container.read(deviceProvider.notifier).connect();
+      container.read(deviceProvider.notifier).armOtaAutoConfirm('1.5.0');
+
+      // Act
+      mock.statusController.add(
+        DeviceStatus.fromString('Firmware: 1.4.0\nOTA: PENDING_VERIFY'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert — no confirm sent for the mismatched version.
+      expect(mock.confirmOtaCallCount, equals(0));
+      expect(container.read(deviceProvider).firmwareVersion, equals('1.4.0'));
+
+      // Act — a later frame reporting the originally-expected version must
+      // not retroactively confirm; the one-shot expectation already fired.
+      mock.statusController.add(
+        DeviceStatus.fromString('Firmware: 1.5.0\nOTA: PENDING_VERIFY'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert — still no confirm; the expectation was disarmed above.
+      expect(mock.confirmOtaCallCount, equals(0));
+    });
+
+    test(
+        'armOtaAutoConfirm — matching version but not pending — no send, '
+        'disarmed', () async {
+      // Arrange
+      final mock = MockBleService();
+      final container = makeContainer(mock);
+      await container.read(deviceProvider.notifier).connect();
+      container.read(deviceProvider.notifier).armOtaAutoConfirm('1.5.0');
+
+      // Act — version matches but the device never flagged pending-verify
+      // (e.g. it was already confirmed by the time this frame arrived).
+      mock.statusController.add(DeviceStatus.fromString('Firmware: 1.5.0'));
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert
+      expect(mock.confirmOtaCallCount, equals(0));
+
+      // Act — a later matching+pending frame must not confirm either; the
+      // one-shot expectation was consumed by the first version-bearing frame.
+      mock.statusController.add(
+        DeviceStatus.fromString('Firmware: 1.5.0\nOTA: PENDING_VERIFY'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert
+      expect(mock.confirmOtaCallCount, equals(0));
+    });
+
+    test(
+        'armOtaAutoConfirm — confirm send throws — otaPendingVerify stays '
+        'true', () async {
+      // Arrange
+      final mock = MockBleService();
+      final container = makeContainer(mock);
+      await container.read(deviceProvider.notifier).connect();
+      container.read(deviceProvider.notifier).armOtaAutoConfirm('1.5.0');
+      mock.nextRefusalCode = kIdl0AckMutexRefused;
+
+      // Act
+      mock.statusController.add(
+        DeviceStatus.fromString('Firmware: 1.5.0\nOTA: PENDING_VERIFY'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert — the failed send never rethrows into the stream listener,
+      // and the manual pending-verify card stays the fallback.
+      expect(container.read(deviceProvider).otaPendingVerify, isTrue);
+    });
+
+    test('disarmOtaAutoConfirm — cancels a pending arm before any frame',
+        () async {
+      // Arrange
+      final mock = MockBleService();
+      final container = makeContainer(mock);
+      await container.read(deviceProvider.notifier).connect();
+      container.read(deviceProvider.notifier).armOtaAutoConfirm('1.5.0');
+
+      // Act
+      container.read(deviceProvider.notifier).disarmOtaAutoConfirm();
+      mock.statusController.add(
+        DeviceStatus.fromString('Firmware: 1.5.0\nOTA: PENDING_VERIFY'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert
+      expect(mock.confirmOtaCallCount, equals(0));
     });
   });
 }

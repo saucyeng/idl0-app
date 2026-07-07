@@ -59,9 +59,24 @@ class MockBleService implements BleService {
   /// Number of times [connect] has been called.
   int connectCalls = 0;
 
+  /// Optional status frame [connect] pushes onto [statusStream] before its
+  /// returned future resolves.
+  ///
+  /// Models real `BleConnection` ordering: the device's GATT-handshake
+  /// status notification reaches the stream while the caller (e.g.
+  /// `DeviceNotifier.connect`) is still awaiting `connect()` — i.e. before
+  /// [DeviceState.isConnected] flips true. Additive: null (the default)
+  /// preserves every other test's existing behavior of emitting nothing
+  /// during connect.
+  DeviceStatus? statusDuringConnect;
+
   @override
   Future<({String name, int batteryPercent})> connect() async {
     connectCalls++;
+    final duringConnect = statusDuringConnect;
+    if (duringConnect != null) {
+      statusController.add(duringConnect);
+    }
     await Future.delayed(const Duration(milliseconds: 300));
     if (connectFailures > 0) {
       connectFailures--;
