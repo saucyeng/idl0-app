@@ -8,6 +8,33 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
 
 ## Active / awaiting hardware verification
 
+- [ ] **OTA hardware E2E against the first GitHub release (2026-07-06)** — after
+      `v0.1.0` is cut: USB-flash once (rollback bootloader; temporary
+      uncommitted `version.txt` = `0.0.1`), confirm the update card
+      `v0.0.1 → v0.1.0` + hero banner, accept → download (sha verified) →
+      `/ota` → reboot → reconnect → **auto-confirm clears PENDING_VERIFY
+      without tapping the card** and survives a power-cycle; then the rollback
+      negative test: manual-picker push of the same `.bin` (arms nothing),
+      don't confirm, power-cycle → bootloader rolls back to the prior slot
+      (§4.6 proven end-to-end). Hardware is user-run.
+
+- [ ] **`PushFirmwareHandle.done` never settles on early cancel (2026-07-06)** —
+      found while closing the binding audit: `cancel()` before the OTA TCP
+      connection is established doesn't abort the connecting request
+      (`HttpClient.close(force: true)` semantics; corroborated against
+      `http` 1.6.0 `IOClient`), so `done` hangs, contradicting its doc. Mid-upload
+      cancel works and is regression-tested. Make cancel deterministic (race
+      `done` against the cancel, or move to abortable requests). Touches
+      `real_wifi_service.dart` / `wifi_transfer.dart`.
+
+- [ ] **Firmware size headroom + stale Kconfig symbol (2026-07-06)** — the app
+      image now fits the 1600K OTA slot with only **4% free** (rollback
+      bootloader growth); next sizeable firmware feature may force a slot-size
+      revisit (partition changes require USB reflash). Also
+      `sdkconfig.defaults` carries `ESPTOOLPY_FLASHSIZE_DETECT`, dropped in
+      IDF v6 (build warning, harmless) — clean up alongside the next defaults
+      change.
+
 - [ ] **Session-file `fsync` durability (2026-06-29)** — firmware now `fsync`s in
       `idl0_sd_flush`, so the FAT directory-entry size is committed at the ~1 Hz
       flush cadence — fixing the power-loss "file frozen at the GPS-rename size"
@@ -83,6 +110,24 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
       whether the `accel_z`-off-on-IMU1/2 channel mask (`0x3BEFF`) is intentional.
 
 ## Completed
+- [x] **OTA release enablement sprint — both repos (2026-07-06)** — the
+      finishing work the repo split unblocked, executed as 8 file-disjoint
+      parallel subagent tasks, each task-reviewed before commit:
+      firmware — `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` in
+      `sdkconfig.defaults` (§4.6 pending-verify/rollback now real; clean build,
+      4% slot headroom); release workflow staged-asset fix (the `find|head`
+      pick could publish `ota_data_initial.bin`; now explicit
+      `build/idl0_firmware.bin` → `idl0-firmware-v<ver>.bin` + `sha256sum`
+      sidecar, exactly one `.bin` per release); `docs/README.md` spec pointer +
+      stale-path repoints; firmware-repo `CLAUDE.md`.
+      app — §27.7 completed: post-OTA **auto-confirm** (one-shot
+      `armOtaAutoConfirm`, consumed only on connected version-bearing frames —
+      a review-caught ordering flaw; tests model real BLE handshake ordering
+      via `statusDuringConnect` on the shared mock) + `FirmwareAheadOfChannel`
+      informational note; Device-hero `FW v<version>` readout row (§23.10);
+      pushFirmware binding audit closed with regression tests; firmware-catalog
+      asset-contract docs + versioned-asset parsing test. SPEC §4.6/§23.10/§27.7
+      updated. Remaining: cut `v0.1.0` (tag), hardware E2E (both under Active).
 - [x] **In-app FIT export (Strava) with native lap splits (2026-06-23)** —
       session detail card **Export .fit** (GPS-gated, beside Create track):
       `export_fit_to_vec` engine bridge → bytes → file-picker save, one FIT
@@ -989,6 +1034,7 @@ Shipped in T1–T16 of the WiFi/Logging Mode Mutex plan. See SPEC §7.2, §10.4,
   free SD MB) and add them to `DeviceState` + status parser when
   they land in the §7.3 status string.
 - [x] **Transport-level WiFi wrap cleanup — pushConfig done in S2; pushFirmware still pending.** Stability pass S2 (`5c572c5`) stripped the `wifiOn()` / `bind` / `release` wrap from `BleConnection.pushConfig`; it is now pure HTTP and requires the caller to be in `Mode.wifi`. `RealWifiService.pushFirmware` and any other internal WiFi wraps still need the same audit — verify no binding leaks remain after the OTA upload path.
+      Audit closed 2026-07-06: no leak — `pushFirmware` never touches the binder (dedicated `http.Client`, closed on completion/cancel); the process bind is owned solely by `WifiBindController`, which releases on the post-OTA link-loss → `Mode.idle` transition. Regression tests: `test/providers/wifi_bind_controller_test.dart` (OTA-reboot release), `test/transport/real_wifi_service_test.dart` (`pushFirmware` no-binder + cancel). Adjacent early-cancel defect found and queued under Active.
 - [ ] **Relocate `wifiServiceProvider` out of `runs_provider.dart`.** Stability pass S3 imports `wifiServiceProvider` from `runs_provider.dart` into `providers/mode_step.dart` so the `WifiOn` / `WifiOff` steps can call `bind()` / `release()`. That's a layer smell — `runs_provider` is a sessions concept; wifi is transport-adjacent. Move the provider definition to `transport/wifi_service.dart` (or a dedicated `providers/wifi_provider.dart`) and update the two import sites. ~5 lines, zero behavior change.
 
 ---

@@ -193,7 +193,7 @@ ota_0,    app,  ota_0,   0x20000,  1600K
 ota_1,    app,  ota_1,          ,  1600K
 ```
 
-OTA update: app pushes `.bin` to `/ota` endpoint over WiFi (§6.1). ESP-IDF `esp_ota_ops.h` handles slot selection, streaming write, SHA-256 verification, and boot-partition switching. After an OTA-installed image boots, it is in pending-verify state until the app sends `CMD_OTA_CONFIRM` (§7.2); if it reboots before that confirmation, the bootloader rolls back to the previous slot.
+OTA update: app pushes `.bin` to `/ota` endpoint over WiFi (§6.1). ESP-IDF `esp_ota_ops.h` handles slot selection, streaming write, SHA-256 verification, and boot-partition switching. After an OTA-installed image boots, it is in pending-verify state until the app sends `CMD_OTA_CONFIRM` (§7.2); if it reboots before that confirmation, the bootloader rolls back to the previous slot. Rollback is armed by `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` in `sdkconfig.defaults`; because this is a bootloader option, devices flashed before it was enabled require one USB reflash (the bootloader is never OTA-updated).
 
 ---
 
@@ -1826,12 +1826,15 @@ primary-action surface — a state machine over the live device state:
 - **Recording**: a pulsing live indicator + `mm:ss` timer, RX/TX, the
   peripheral readout, and a large amber **Stop recording** CTA.
 
-The **peripheral readout** (SD / GPS / IMU / HR / HRM battery) is folded
-into the hero, colour-coded so a degraded sensor reads as an in-place
-warning — green healthy, amber degraded, red fault — never blocking
-recording (§23.9). There is no separate Connection section. Richer detail
-(GPS fix-type + satellite count, SD free space, signal RSSI, firmware
-version) is planned, pending the firmware §7.3 status carrying it.
+The **peripheral readout** (SD / GPS / IMU / HR / HRM battery / firmware
+version) is folded into the hero, colour-coded so a degraded sensor reads
+as an in-place warning — green healthy, amber degraded, red fault — never
+blocking recording (§23.9). The firmware-version entry (`FW v<version>`)
+is neutral — a version is not a health state — and renders only when the
+device has reported a §7.3 `Firmware:` line. There is no separate
+Connection section. Richer detail (GPS fix-type + satellite count, SD free
+space, signal RSSI) is planned, pending the firmware §7.3 status carrying
+it.
 
 The card is intentionally dense — no instructional copy (first-run
 guidance is a separate walkthrough). Start/Stop route through
@@ -2614,10 +2617,26 @@ update only when hosted `>` device.
 the channel's latest release, compares versions, and surfaces an "update
 available" card (Settings → Firmware) and a Device-hero banner. Accepting
 downloads the `.bin` into memory — optionally verifying a published
-`firmware.bin.sha256` — then hands the bytes to the existing OTA push (§6.1
+`idl0-firmware-v<ver>.bin.sha256` sidecar (`sha256sum` output format,
+`<hex>  <filename>`) — then hands the bytes to the existing OTA push (§6.1
 `/ota` → reboot → §7.2 `CMD_OTA_CONFIRM`). The device's embedded SHA-256
 (`esp_ota_end`) remains the authoritative integrity gate; the app-side check is
 a fast-fail.
+
+**Auto-confirm.** After a catalog-driven update push completes and the device
+reboots, the app arms a one-shot auto-confirm expectation carrying the pushed
+release's version. The first version-bearing status frame received after the
+post-reboot reconnect completes consumes the expectation unconditionally; if —
+and only if — the reported `Firmware:` version equals the pushed version and
+the frame carries `OTA: PENDING_VERIFY`, the app sends `CMD_OTA_CONFIRM`
+automatically, committing the new image before any subsequent reboot can
+trigger the bootloader's rollback of the unconfirmed slot. A device that comes
+back reporting any other version (e.g. the bootloader already rolled back)
+disarms the expectation without confirming. The manual pending-verify card
+remains the fallback for manual `.bin` pushes (no known target version —
+auto-confirm is never armed; starting one disarms any pending expectation) and
+for interrupted flows (version mismatch, a failed confirm send, or a frame
+with no pending flag).
 
 **Failure modes.** Offline or absent device version → no banner, manual push
 still available. An update is offered only when hosted is strictly newer; a
