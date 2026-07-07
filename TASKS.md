@@ -35,6 +35,13 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
       IDF v6 (build warning, harmless) — clean up alongside the next defaults
       change.
 
+- [ ] **Cosmetic follow-ups from the sprint's final review (2026-07-07)** —
+      unify the firmware repo's spec-citation comment phrasing to the
+      `IDL0_SPEC.md §N` form `docs/README.md` documents (a few files use
+      "§N of IDL0_SPEC.md"); optionally add a catalog test pinning the
+      defensive last-`.bin`-wins branch. Fold into the next pass touching
+      those files — not worth standalone commits.
+
 - [ ] **Session-file `fsync` durability (2026-06-29)** — firmware now `fsync`s in
       `idl0_sd_flush`, so the FAT directory-entry size is committed at the ~1 Hz
       flush cadence — fixing the power-loss "file frozen at the GPS-rename size"
