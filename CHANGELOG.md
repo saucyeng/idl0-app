@@ -10,6 +10,10 @@ Log file schema versions and app versions are independent. Both are noted where 
 
 ## [Unreleased]
 
+### Fixed
+
+- **Device firmware version with a leading `v` broke the update check and doubled in the hero (2026-07-08).** A local git-describe build reports the tag name verbatim (`v0.1.0`), but the app only stripped the leading `v` from *release tags* (`firmware_catalog.dart`), not from the *device-reported* version — so `Version.parse('v0.1.0')` threw and Settings showed "Couldn't check: device version unparseable," while the Device-hero readout rendered `vv0.1.0` (the row prepends its own `v`). `DeviceStatus.fromString` now strips a single leading `v` when parsing the §7.3 `Firmware:` line, normalising storage so the check parses, the hero shows one `v`, and the auto-confirm version match stays consistent with the release side (which is already `v`-stripped). Surfaced during v0.1.0 hardware bring-up. **Spec disposition:** no spec change needed — this makes the implementation match §27.7's existing "version of record = tag with `v` stripped" contract.
+
 ### Added
 
 - **OTA release enablement — rollback, release CI fix, §27.7 auto-confirm + ahead-of-channel, across both repos (2026-07-06).** The finishing sprint the firmware repo split unblocked:

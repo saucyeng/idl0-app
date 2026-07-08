@@ -173,10 +173,18 @@ class DeviceStatus {
   /// Extracts the value after the first `:` without changing case — semver
   /// versions are case-sensitive in their pre-release component, so the
   /// uppercasing [_lineValue] would corrupt e.g. `1.6.0-beta.1`.
+  ///
+  /// Strips a single leading `v` so a local git-describe build — which reports
+  /// the tag name verbatim, e.g. `v0.1.0` — normalises to the same semver the
+  /// release side compares against: the version of record is the tag with its
+  /// `v` stripped (§27.7), and this mirrors the catalog's release-tag parsing.
+  /// Keeping the stored value `v`-free also stops the Device-hero readout
+  /// (which renders `v$firmwareVersion`, §23.10) from showing a doubled `vv`.
   static String? _firmwareLineValue(String trimmedLine) {
     final colon = trimmedLine.indexOf(':');
     if (colon < 0) return null;
-    final value = trimmedLine.substring(colon + 1).trim();
+    var value = trimmedLine.substring(colon + 1).trim();
+    if (value.startsWith('v')) value = value.substring(1);
     return value.isEmpty ? null : value;
   }
 
