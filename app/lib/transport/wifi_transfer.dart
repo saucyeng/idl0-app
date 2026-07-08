@@ -69,6 +69,16 @@ class WifiTransfer {
   /// [TransferTimeoutException] rather than freezing the UI forever.
   static const Duration _defaultRequestTimeout = Duration(seconds: 8);
 
+  /// Backstop for the OTA response wait. The device only answers `POST /ota`
+  /// after receiving the whole image and validating its SHA-256, so this is
+  /// deliberately loose — a healthy ~1.5 MB upload over the local AP finishes
+  /// in a few seconds. It exists only so a device that accepts the connection
+  /// then never responds (or a dead proxy link) surfaces as a
+  /// [DeviceUnreachableException] the caller can retry, instead of an
+  /// infinite `await`. Every other method here already caps its request; this
+  /// closes the one gap.
+  static const Duration _otaResponseTimeout = Duration(seconds: 45);
+
   final String _baseUrl;
   final http.Client _client;
   final Duration _requestTimeout;
@@ -331,7 +341,11 @@ class WifiTransfer {
 
     final http.StreamedResponse response;
     try {
-      response = await responseFuture;
+      response = await responseFuture.timeout(_otaResponseTimeout);
+    } on TimeoutException {
+      throw DeviceUnreachableException(
+        'POST /ota got no response within ${_otaResponseTimeout.inSeconds}s',
+      );
     } on Exception catch (e) {
       throw DeviceUnreachableException('POST /ota failed: $e');
     }

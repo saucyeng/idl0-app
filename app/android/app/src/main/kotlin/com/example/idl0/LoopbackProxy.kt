@@ -3,6 +3,7 @@ package com.example.idl0
 import android.net.Network
 import android.util.Log
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.CopyOnWriteArrayList
@@ -28,6 +29,17 @@ class LoopbackProxy(
 
         /** 16 KiB pump buffer — matches WifiTransfer's OTA chunk size. */
         private const val BUF_BYTES = 16 * 1024
+
+        /**
+         * Bounded connect to the device (ms). `onAvailable` fires the instant
+         * Android *associates* with the AP, but DHCP/ARP/route to 192.168.4.1
+         * aren't ready for up to a second or two after. A plain
+         * `createSocket(host, port)` blocks with NO timeout in that window —
+         * the observed OTA-push hang (proxy up, then infinite silence). A
+         * bounded connect turns the cold attempt into a fast failure the Dart
+         * layer retries once the link warms up.
+         */
+        private const val CONNECT_TIMEOUT_MS = 2500
     }
 
     @Volatile
@@ -77,14 +89,21 @@ class LoopbackProxy(
     }
 
     private fun handle(client: Socket) {
+        Log.i(TAG, "loopback client accepted; dialing $targetHost:$targetPort")
         val device = try {
-            network.socketFactory.createSocket(targetHost, targetPort)
+            // Unconnected, network-bound socket, then a *bounded* connect().
+            // createSocket(host, port) would block indefinitely if the AP
+            // route isn't up yet (warmup window) — see CONNECT_TIMEOUT_MS.
+            network.socketFactory.createSocket().apply {
+                connect(InetSocketAddress(targetHost, targetPort), CONNECT_TIMEOUT_MS)
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "device connect failed: $e")
+            Log.w(TAG, "device connect failed (${e.javaClass.simpleName}): ${e.message}")
             closeQuietly { client.close() }
             sockets.remove(client)
             return
         }
+        Log.i(TAG, "device connected; pumping bytes both ways")
         sockets.add(device)
 
         // tcpNoDelay: HTTP request/response on a local link — don't Nagle.

@@ -57,12 +57,25 @@ class RealWifiService implements WifiService {
   /// avoid a real [path_provider] call.
   final Future<Directory> Function()? _sessionsDirOverride;
 
-  /// Delay before the single retry inside [getFileList].
+  /// Delay before the single retry inside [getFileList], and between
+  /// [pushFirmware] warmup attempts.
   ///
   /// Production: 500 ms — long enough to absorb the post-bind warmup race
   /// (DHCP / ARP / device-side httpd settling) without making the success
   /// path feel sluggish. Tests inject [Duration.zero].
   final Duration _firstRetryDelay;
+
+  /// How many times [pushFirmware] attempts the upload before giving up.
+  ///
+  /// The OTA push is the *first* HTTP request after the WiFi bind (unlike a
+  /// download, which `getFileList` warms first), so it eats the post-bind
+  /// warmup race directly: `onAvailable` fires the instant Android associates
+  /// with the AP, but the route to `192.168.4.1` isn't ready for a second or
+  /// two. With the loopback proxy's bounded connect (LoopbackProxy.kt) a cold
+  /// attempt fails fast rather than hanging; these attempts (spaced by
+  /// [_firstRetryDelay]) then land on the warm link. A cold attempt reaches
+  /// the device 0 bytes in — `esp_ota_begin` never runs — so retrying is safe.
+  static const int _pushWarmupAttempts = 5;
 
   /// Creates a [RealWifiService].
   ///
@@ -188,11 +201,16 @@ class RealWifiService implements WifiService {
     return controller.stream;
   }
 
-  /// Streams [bin] to the device's `POST /ota` endpoint.
+  /// Streams [bin] to the device's `POST /ota` endpoint, retrying the
+  /// post-bind warmup race (see [_pushWarmupAttempts]).
   ///
-  /// Constructs a fresh [http.Client] for this push so [PushFirmwareHandle.cancel]
-  /// can abort by closing the client. The in-flight `send()` then throws and
-  /// `pushFirmware` rewraps it as [DeviceUnreachableException].
+  /// A fresh [WifiTransfer] (and its [http.Client]) is built per attempt via
+  /// [_transferFactory], so [PushFirmwareHandle.cancel] can abort the current
+  /// attempt by closing its client — the in-flight `send()` then throws and is
+  /// surfaced as a [DeviceUnreachableException]. Only connection-level failures
+  /// ([DeviceUnreachableException] / [TransferTimeoutException]) are retried; a
+  /// [FirmwarePushException] (device rejected the image — 400/500) propagates
+  /// immediately, since retrying a bad image cannot help.
   ///
   /// Precondition: the panel scope must already hold a [bind] and have sent
   /// `CMD_WIFI_ON`. See [PushFirmwareHandle] doc for cancel semantics.
@@ -201,15 +219,39 @@ class RealWifiService implements WifiService {
     Uint8List bin, {
     void Function(int sent, int total)? onProgress,
   }) {
-    final client = http.Client();
-    final transfer =
-        WifiTransfer(baseUrl: _binder.deviceBaseUrl, httpClient: client);
-    final done = transfer
-        .pushFirmware(bin, onProgress: onProgress)
-        .whenComplete(transfer.close);
+    var canceled = false;
+    WifiTransfer? current;
+
+    Future<void> run() async {
+      TransportException? lastError;
+      for (var attempt = 1; attempt <= _pushWarmupAttempts; attempt++) {
+        if (canceled) {
+          throw const DeviceUnreachableException('Firmware push canceled');
+        }
+        if (attempt > 1) await Future.delayed(_firstRetryDelay);
+        final transfer = _transferFactory(_binder.deviceBaseUrl);
+        current = transfer;
+        try {
+          await transfer.pushFirmware(bin, onProgress: onProgress);
+          return;
+        } on FirmwarePushException {
+          rethrow; // device rejected the image — a retry cannot help
+        } on TransportException catch (e) {
+          lastError = e; // warmup race / timeout / canceled — retry
+        } finally {
+          transfer.close();
+        }
+      }
+      throw lastError ??
+          const DeviceUnreachableException('Firmware push failed');
+    }
+
     return (
-      done: done,
-      cancel: () async => client.close(),
+      done: run(),
+      cancel: () async {
+        canceled = true;
+        current?.close();
+      },
     );
   }
 

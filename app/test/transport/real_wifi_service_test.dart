@@ -47,11 +47,10 @@ class _SpyBinder extends WifiNetworkBinder {
 
 /// Spy [WifiNetworkBinder] that also reports a fixed [deviceBaseUrl].
 ///
-/// [pushFirmware] builds its own [http.Client]/[WifiTransfer] rather than
-/// going through the injectable `transferFactory` (see class doc on
-/// [RealWifiService.pushFirmware]), so its tests need a binder that both
-/// points at a real local server (via [deviceBaseUrl]) and records whether
-/// bind/release were ever touched.
+/// The [pushFirmware] round-trip / cancel tests run against a real loopback
+/// [HttpServer] (via the default transfer factory) rather than a [MockClient],
+/// so they need a binder that both points at that server (via [deviceBaseUrl])
+/// and records whether bind/release were ever touched.
 class _SpyUrlBinder extends WifiNetworkBinder {
   _SpyUrlBinder(this._url) : super(isAndroidPlatform: false);
 
@@ -398,11 +397,10 @@ void main() {
   });
 
   group('RealWifiService.pushFirmware —', () {
-    // pushFirmware (unlike getFileList/downloadFile/pushConfig) builds its
-    // own http.Client/WifiTransfer per call instead of going through the
-    // injectable transferFactory (see class doc), so a MockClient can't be
-    // wired in here — these tests stand up a real loopback HttpServer as
-    // the device stand-in.
+    // The round-trip / cancel tests exercise real socket behaviour (an
+    // in-flight request being aborted by a client close), so they stand up a
+    // real loopback HttpServer as the device stand-in. The warmup-retry tests
+    // below instead inject a MockClient-backed transfer factory.
     late HttpServer server;
 
     tearDown(() async {
@@ -456,14 +454,81 @@ void main() {
       await uploadReceived.future;
       await handle.cancel();
 
-      // Assert — closing the dedicated client aborts the in-flight request:
-      // done completes with the doc-promised DeviceUnreachableException
-      // instead of hanging, and the binder is never touched.
+      // Assert — closing the current attempt's client aborts the in-flight
+      // request: done completes with the doc-promised
+      // DeviceUnreachableException instead of hanging, and the binder is
+      // never touched.
       await expectLater(
         handle.done,
         throwsA(isA<DeviceUnreachableException>()),
       );
       expect(binder.callLog, isEmpty);
+    });
+
+    test('warmup race — first attempt fails, a retry succeeds', () async {
+      // Arrange — the OTA push is the first request after the bind, so it eats
+      // the post-bind warmup race (proxy device-connect not ready). The first
+      // attempt throws; the retry lands on the warm link.
+      final service = RealWifiService(
+        deviceName: 'IDL0-A3F2',
+        binder: _StubUrlBinder('http://192.168.4.1'),
+        transferFactory: _flakyThenSuccessTransfer(
+          failuresBeforeSuccess: 1,
+          onSuccess: http.Response('ok\n', 200),
+        ),
+        firstRetryDelay: Duration.zero,
+      );
+
+      // Act
+      final handle = service.pushFirmware(Uint8List.fromList([1, 2, 3, 4]));
+
+      // Assert — the retry absorbs the race; done completes without error.
+      await expectLater(handle.done, completes);
+    });
+
+    test('device rejects the image (400) — no retry, FirmwarePushException',
+        () async {
+      // Arrange — a 400 means esp_ota_end rejected the image (SHA mismatch);
+      // retrying an already-transferred bad image cannot help.
+      var calls = 0;
+      final service = RealWifiService(
+        deviceName: 'IDL0-A3F2',
+        binder: _StubUrlBinder('http://192.168.4.1'),
+        transferFactory: _transferWith((_) async {
+          calls++;
+          return http.Response('image validation failed', 400);
+        }),
+        firstRetryDelay: Duration.zero,
+      );
+
+      // Act / Assert — propagates immediately, uploaded exactly once.
+      await expectLater(
+        service.pushFirmware(Uint8List.fromList([1, 2, 3, 4])).done,
+        throwsA(isA<FirmwarePushException>()),
+      );
+      expect(calls, 1);
+    });
+
+    test('device unreachable on every attempt — fails after exhausting retries',
+        () async {
+      // Arrange — the AP never becomes reachable; every attempt throws.
+      var calls = 0;
+      final service = RealWifiService(
+        deviceName: 'IDL0-A3F2',
+        binder: _StubUrlBinder('http://192.168.4.1'),
+        transferFactory: _transferWith((_) async {
+          calls++;
+          throw const SocketException('AP down');
+        }),
+        firstRetryDelay: Duration.zero,
+      );
+
+      // Act / Assert — surfaces DeviceUnreachableException after retrying.
+      await expectLater(
+        service.pushFirmware(Uint8List.fromList([1, 2, 3, 4])).done,
+        throwsA(isA<DeviceUnreachableException>()),
+      );
+      expect(calls, greaterThan(1));
     });
   });
 }
