@@ -12,6 +12,7 @@ import '../../../providers/mode.dart';
 import '../../../providers/mode_controller.dart';
 import '../../../providers/runs_provider.dart' show wifiServiceProvider;
 import '../../../providers/settings_provider.dart';
+import '../../../providers/wifi_bind_controller.dart';
 import '../../../transport/firmware_catalog.dart';
 import '../../../transport/wifi_service.dart';
 import '../../brand/brand.dart';
@@ -224,8 +225,6 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
       if (!mounted) return;
     }
 
-    final wifi = ref.read(wifiServiceProvider);
-
     setState(() {
       _phase = _PushPhase.pushing;
       _sentBytes = 0;
@@ -233,6 +232,23 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
       _errorMessage = null;
       _userCanceled = false;
     });
+
+    // Wait for the WiFi link to actually converge before uploading. `switchTo`
+    // only flips Mode; the bind is a reactive, seconds-long consequence
+    // (WifiBindController), and pushing before the proxy is up reads the direct
+    // `192.168.4.1` (dead route on Android). Same gate the download path uses.
+    final linked =
+        await ref.read(wifiBindControllerProvider.notifier).awaitLinked();
+    if (!mounted) return;
+    if (!linked) {
+      setState(() {
+        _phase = _PushPhase.idle;
+        _errorMessage = 'WiFi link not ready — check the device and retry.';
+      });
+      return;
+    }
+
+    final wifi = ref.read(wifiServiceProvider);
 
     try {
       final handle = wifi.pushFirmware(

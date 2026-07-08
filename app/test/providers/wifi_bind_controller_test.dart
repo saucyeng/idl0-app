@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:idl0/providers/device_provider.dart';
@@ -106,6 +108,90 @@ void main() {
         container.read(wifiBindControllerProvider).phase,
         equals(WifiBindPhase.idle),
       );
+    });
+
+    test('awaitLinked — already bound — returns true immediately', () async {
+      // Arrange — converge the link.
+      ble.statusController.add(DeviceStatus.fromString('WiFi: ON'));
+      await _settle();
+      expect(
+        container.read(wifiBindControllerProvider).phase,
+        equals(WifiBindPhase.bound),
+      );
+
+      // Act / Assert — resolves without any further state change.
+      expect(
+        await container.read(wifiBindControllerProvider.notifier).awaitLinked(),
+        isTrue,
+      );
+    });
+
+    test('awaitLinked — binding then bound — completes true once converged',
+        () async {
+      // Arrange — hold the bind open so the phase stays `binding`.
+      wifi.bindGate = Completer<void>();
+      ble.statusController.add(DeviceStatus.fromString('WiFi: ON'));
+      await _settle();
+      expect(
+        container.read(wifiBindControllerProvider).phase,
+        equals(WifiBindPhase.binding),
+      );
+
+      // Act — park on awaitLinked, then let the bind finish.
+      final linked =
+          container.read(wifiBindControllerProvider.notifier).awaitLinked();
+      wifi.bindGate!.complete();
+      await _settle();
+
+      // Assert
+      expect(await linked, isTrue);
+    });
+
+    test('awaitLinked — bind fails — completes false', () async {
+      // Arrange — hold the bind, arm it to fail on release.
+      wifi.bindGate = Completer<void>();
+      wifi.bindError = const DummyTransportException('no AP');
+      ble.statusController.add(DeviceStatus.fromString('WiFi: ON'));
+      await _settle();
+      expect(
+        container.read(wifiBindControllerProvider).phase,
+        equals(WifiBindPhase.binding),
+      );
+
+      // Act — park, then release the gate so the bind throws.
+      final linked =
+          container.read(wifiBindControllerProvider.notifier).awaitLinked();
+      wifi.bindGate!.complete();
+      await _settle();
+
+      // Assert
+      expect(await linked, isFalse);
+      expect(
+        container.read(wifiBindControllerProvider).phase,
+        equals(WifiBindPhase.failed),
+      );
+    });
+
+    test('awaitLinked — link never converges — returns false after timeout',
+        () async {
+      // Arrange — hold the bind open indefinitely (phase stays `binding`).
+      wifi.bindGate = Completer<void>();
+      ble.statusController.add(DeviceStatus.fromString('WiFi: ON'));
+      await _settle();
+      expect(
+        container.read(wifiBindControllerProvider).phase,
+        equals(WifiBindPhase.binding),
+      );
+
+      // Act / Assert — a short budget resolves false without the bind settling.
+      final linked = await container
+          .read(wifiBindControllerProvider.notifier)
+          .awaitLinked(timeout: const Duration(milliseconds: 50));
+      expect(linked, isFalse);
+
+      // Cleanup — release the held bind so it doesn't dangle past the test.
+      wifi.bindGate!.complete();
+      await _settle();
     });
   });
 }

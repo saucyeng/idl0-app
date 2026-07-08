@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:idl0/providers/device_provider.dart';
 import 'package:idl0/providers/firmware_update_provider.dart';
 import 'package:idl0/providers/runs_provider.dart' show wifiServiceProvider;
+import 'package:idl0/providers/wifi_bind_controller.dart';
 import 'package:idl0/transport/firmware_catalog.dart';
 import 'package:idl0/transport/wifi_service.dart';
 import 'package:idl0/ui/brand/quiet_button.dart';
@@ -184,6 +185,25 @@ FirmwareRelease _release(String version, {int sizeBytes = 1024}) =>
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Stub [WifiBindController] with a fixed [awaitLinked] verdict, so section
+/// tests exercise the push flow without standing up the real reactive bind
+/// (which has its own tests). [linked] false models a link that never
+/// converged — the OTA `_push` must refuse to upload.
+class _StubBindController extends WifiBindController {
+  _StubBindController(this._linked);
+
+  final bool _linked;
+
+  @override
+  WifiBindState build() => WifiBindState(
+        _linked ? WifiBindPhase.bound : WifiBindPhase.failed,
+      );
+
+  @override
+  Future<bool> awaitLinked({Duration timeout = const Duration(seconds: 20)}) =>
+      Future.value(_linked);
+}
+
 Widget _wrap({
   required _SpyWifiService wifi,
   required MockBleService ble,
@@ -192,6 +212,7 @@ Widget _wrap({
   FirmwarePicker? picker,
   FirmwareCatalog? catalog,
   FirmwareUpdateState? updateState,
+  bool linked = true,
 }) {
   return ProviderScope(
     overrides: [
@@ -199,6 +220,8 @@ Widget _wrap({
       bleServiceProvider.overrideWithValue(ble),
       deviceProvider.overrideWith(() => notifier),
       firmwareCatalogProvider.overrideWithValue(catalog ?? _FakeCatalog()),
+      wifiBindControllerProvider
+          .overrideWith(() => _StubBindController(linked)),
       if (updateState != null)
         firmwareUpdateProvider
             .overrideWith(() => _StubUpdateNotifier(updateState)),
@@ -485,6 +508,43 @@ void main() {
       wifi.pendingDone?.complete();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
+    });
+
+    testWidgets('WiFi link never converges — no upload, error surfaced',
+        (tester) async {
+      // Arrange — connected and in WiFi mode, but the bind never reaches
+      // `bound` (awaitLinked → false). The push must refuse rather than fire
+      // at the dead 192.168.4.1 route.
+      final wifi = _SpyWifiService();
+      final ble = MockBleService();
+      const initial = DeviceState(
+        isConnected: true,
+        deviceName: 'IDL0-A3F2',
+        wifiOn: true,
+      );
+      final notifier = _FakeDeviceNotifier(initial);
+      await tester.pumpWidget(
+        _wrap(
+          wifi: wifi,
+          ble: ble,
+          initialDevice: initial,
+          notifier: notifier,
+          picker: () async => _fakeFirmware(2048),
+          linked: false,
+        ),
+      );
+      await tester.pump();
+      await tester.tap(_quietButton('Choose firmware file…'));
+      await tester.pumpAndSettle();
+
+      // Act — attempt the push.
+      await tester.tap(_quietButton('Push to Device'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      // Assert — never uploaded; the user sees the link error.
+      expect(wifi.callLog, isNot(contains('pushFirmware')));
+      expect(find.textContaining('WiFi link not ready'), findsOneWidget);
     });
 
     testWidgets(

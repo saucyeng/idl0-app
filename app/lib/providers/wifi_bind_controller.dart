@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/exceptions.dart';
@@ -48,6 +50,10 @@ class WifiBindState {
 /// non-autoDispose, so once instantiated it lives for the app session and keeps
 /// following mode even while the user is on the Data tab syncing.
 class WifiBindController extends Notifier<WifiBindState> {
+  /// Callers parked in [awaitLinked] while the bind converges. Completed
+  /// (and cleared) the moment the phase leaves [WifiBindPhase.binding].
+  final List<Completer<bool>> _linkWaiters = [];
+
   @override
   WifiBindState build() {
     // fireImmediately handles "already in wifi mode at creation"; the ongoing
@@ -61,19 +67,71 @@ class WifiBindController extends Notifier<WifiBindState> {
     return const WifiBindState(WifiBindPhase.idle);
   }
 
+  /// Waits for the WiFi link to finish converging before a caller issues its
+  /// first device HTTP request.
+  ///
+  /// [WifiService.bind] is a **reactive** consequence of entering [Mode.wifi]
+  /// (see [_sync]) that takes seconds on Android (scan + associate + proxy
+  /// bring-up). A caller that fires an HTTP request the instant `switchTo`
+  /// returns reads the binder's `deviceBaseUrl` before the proxy port is set
+  /// and gets the direct `192.168.4.1`, which black-holes on Android. Gate on
+  /// this first — the same guard the download path uses (SyncController).
+  ///
+  /// Returns true once [WifiBindPhase.bound] (link ready — direct on desktop,
+  /// proxied on Android). Returns false on [WifiBindPhase.failed], if the mode
+  /// leaves WiFi (phase → [WifiBindPhase.idle]), or if the link does not
+  /// converge within [timeout]. [WifiBindPhase.idle] and [WifiBindPhase.binding]
+  /// are treated as "still converging" and wait, because immediately after a
+  /// `switchTo(Mode.wifi)` the reactive [_sync] may not have moved off idle yet.
+  Future<bool> awaitLinked({
+    Duration timeout = const Duration(seconds: 20),
+  }) {
+    switch (state.phase) {
+      case WifiBindPhase.bound:
+        return Future.value(true);
+      case WifiBindPhase.failed:
+        return Future.value(false);
+      case WifiBindPhase.idle:
+      case WifiBindPhase.binding:
+        final completer = Completer<bool>();
+        _linkWaiters.add(completer);
+        return completer.future.timeout(
+          timeout,
+          onTimeout: () {
+            _linkWaiters.remove(completer);
+            return false;
+          },
+        );
+    }
+  }
+
+  /// Sets [state] and wakes any [awaitLinked] callers once the bind reaches a
+  /// terminal phase (bound → true; failed / released-to-idle → false).
+  /// A transition to [WifiBindPhase.binding] leaves waiters parked.
+  void _setPhase(WifiBindState next) {
+    state = next;
+    if (next.phase == WifiBindPhase.binding || _linkWaiters.isEmpty) return;
+    final linked = next.phase == WifiBindPhase.bound;
+    final waiters = List.of(_linkWaiters);
+    _linkWaiters.clear();
+    for (final waiter in waiters) {
+      if (!waiter.isCompleted) waiter.complete(linked);
+    }
+  }
+
   Future<void> _sync(Mode mode) async {
     final wifi = ref.read(wifiServiceProvider);
     if (mode == Mode.wifi) {
-      state = const WifiBindState(WifiBindPhase.binding);
+      _setPhase(const WifiBindState(WifiBindPhase.binding));
       try {
         await wifi.bind();
         // Guard against a mode flip during the await writing stale state.
         if (ref.read(modeProvider) == Mode.wifi) {
-          state = const WifiBindState(WifiBindPhase.bound);
+          _setPhase(const WifiBindState(WifiBindPhase.bound));
         }
       } on TransportException catch (e) {
         if (ref.read(modeProvider) == Mode.wifi) {
-          state = WifiBindState(WifiBindPhase.failed, error: e.message);
+          _setPhase(WifiBindState(WifiBindPhase.failed, error: e.message));
         }
       }
     } else if (mode == Mode.idle || mode == Mode.recording) {
@@ -81,7 +139,7 @@ class WifiBindController extends Notifier<WifiBindState> {
       // than churning release/bind on it.
       await wifi.release();
       if (ref.read(modeProvider) != Mode.wifi) {
-        state = const WifiBindState(WifiBindPhase.idle);
+        _setPhase(const WifiBindState(WifiBindPhase.idle));
       }
     }
   }
