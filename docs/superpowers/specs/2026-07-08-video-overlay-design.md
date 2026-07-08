@@ -234,6 +234,18 @@ bottleneck and rasterization parallelizes ahead of it. 4K works, just slower.
   simple form/JSON), multi-video simultaneous playback, frame-stepping beyond
   nudge buttons.
 
+### Platform coverage
+
+The whole in-app view — playback, GPMF auto-sync, live overlay, manual sync —
+**works on Android**: media_kit plays with hardware decode, and the sync +
+render paths are pure Rust already cross-compiled into the APK by cargokit.
+Only the export driver is desktop/CLI-gated (sidecar ffmpeg/ffprobe processes).
+
+**Android wrinkle (phase 2/3 data-layer detail):** the file picker returns a
+`content://` URI, which media_kit can play but the engine cannot demux for
+GPMF — resolve to a file descriptor at parse time or copy into app storage;
+`.idl0w` stores the resolved location.
+
 ## 8. Error handling
 
 New `VideoError` family (typed, per SPEC §14; no hard crashes):
