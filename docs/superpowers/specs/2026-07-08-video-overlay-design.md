@@ -246,6 +246,14 @@ Only the export driver is desktop/CLI-gated (sidecar ffmpeg/ffprobe processes).
 GPMF — resolve to a file descriptor at parse time or copy into app storage;
 `.idl0w` stores the resolved location.
 
+**Size budget:** engine additions (tiny-skia, mp4, GPMF, fonts, rayon) ≈
++1.5–2.5 MB per binary; ffmpeg adds nothing (sidecar, not bundled). media_kit's
+libmpv is the real cost, paid only at the playback phase: ~5.5 MB/ABI
+(Android, default video build) and roughly 25–30 MB on disk (Windows).
+**Adoption gate:** verify the chosen media_kit version ships 16 KB
+page-size-aligned Android libs (required for Android 15+ targets since
+2025-11).
+
 ## 8. Error handling
 
 New `VideoError` family (typed, per SPEC §14; no hard crashes):
