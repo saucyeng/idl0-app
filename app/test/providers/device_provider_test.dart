@@ -48,6 +48,22 @@ void main() {
       expect(state.batteryPercent, isNotNull);
     });
 
+    test('connect — concurrent calls dedup to a single scan', () async {
+      // Arrange
+      final container = makeContainer();
+      final mock = container.read(bleServiceProvider) as MockBleService;
+      final notifier = container.read(deviceProvider.notifier);
+
+      // Act — two connects fired before the first resolves.
+      final first = notifier.connect();
+      final second = notifier.connect();
+      await Future.wait([first, second]);
+
+      // Assert — the second joined the in-flight attempt; only one scan ran.
+      expect(mock.connectCalls, equals(1));
+      expect(container.read(deviceProvider).isConnected, isTrue);
+    });
+
     test('startRecording when disconnected — isRecording stays false',
         () async {
       // Arrange

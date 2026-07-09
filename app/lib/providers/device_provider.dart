@@ -173,13 +173,27 @@ class DeviceNotifier extends Notifier<DeviceState> {
     _armedOtaVersion = null;
   }
 
+  /// In-flight [connect] attempt, or null when idle. Dedups concurrent callers
+  /// — the auto-connect scanner, a manual picker scan, and
+  /// [reconnectAfterReboot] can all ask to connect at once, and two
+  /// simultaneous scans / GATT connects to the same device fight each other.
+  /// Concurrent callers share this one attempt; cleared when it settles.
+  Future<void>? _connecting;
+
   /// Scans for and connects to the nearest IDL0 device.
   ///
   /// On success, sets [DeviceState.isConnected] to true and populates
   /// [DeviceState.deviceName] and [DeviceState.batteryPercent]. Subscribes to
   /// the device status stream so SD/GPS/IMU state updates live, and to the
   /// link-loss stream so an unexpected BLE drop clears [DeviceState].
-  Future<void> connect() async {
+  ///
+  /// Idempotent under concurrency: a call made while another is still in
+  /// flight returns the same [Future] rather than starting a second scan.
+  Future<void> connect() {
+    return _connecting ??= _connect().whenComplete(() => _connecting = null);
+  }
+
+  Future<void> _connect() async {
     final service = ref.read(bleServiceProvider);
     ref.read(linkActivityProvider.notifier).pulseTx();
     // Cancel any stale subscriptions from a previous attempt, then subscribe

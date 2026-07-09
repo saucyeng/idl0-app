@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:idl0/providers/auto_connect.dart';
 import 'package:idl0/providers/device_provider.dart';
 import 'package:idl0/providers/firmware_update_provider.dart';
 import 'package:idl0/providers/runs_provider.dart' show wifiServiceProvider;
@@ -121,6 +122,20 @@ class _FakeDeviceNotifier extends DeviceNotifier {
     state = const DeviceState();
   }
 
+  /// Instant reconnect so the section's post-OTA `reconnectAfterReboot` runs
+  /// without the real boot delay / retry timers (which would otherwise leave a
+  /// pending timer past the end of a widget test).
+  @override
+  Future<bool> reconnectAfterReboot({
+    Duration bootDelay = const Duration(seconds: 4),
+    Duration retryDelay = const Duration(seconds: 2),
+    int maxAttempts = 3,
+  }) async {
+    reconnectCallCount++;
+    state = state.copyWith(isConnected: true, deviceName: 'IDL0-A3F2');
+    return true;
+  }
+
   @override
   void armOtaAutoConfirm(String version) {
     armedVersion = version;
@@ -143,6 +158,20 @@ class _FakeDeviceNotifier extends DeviceNotifier {
 // Fake firmware catalog + a stub update notifier so widget tests never hit
 // the network and can pin the update-available state.
 // ---------------------------------------------------------------------------
+
+/// Fully inert [AutoConnectController] for section tests — no lifecycle
+/// listener, no scan loop, and pause/resume are no-ops. The section touches
+/// the scanner (pause on push, resume after reconnect); these tests only care
+/// about the OTA UI, so the real scanning behavior is out of scope here (it has
+/// its own tests in `auto_connect_test.dart`).
+class _NoopAutoConnect extends AutoConnectController {
+  @override
+  void build() {}
+  @override
+  void pause() {}
+  @override
+  void resume() {}
+}
 
 class _FakeCatalog implements FirmwareCatalog {
   @override
@@ -218,6 +247,7 @@ Widget _wrap({
     overrides: [
       wifiServiceProvider.overrideWithValue(wifi),
       bleServiceProvider.overrideWithValue(ble),
+      autoConnectControllerProvider.overrideWith(_NoopAutoConnect.new),
       deviceProvider.overrideWith(() => notifier),
       firmwareCatalogProvider.overrideWithValue(catalog ?? _FakeCatalog()),
       wifiBindControllerProvider

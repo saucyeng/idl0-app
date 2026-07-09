@@ -1844,9 +1844,14 @@ guidance is a separate walkthrough). Start/Stop route through
 `ModeResultListener` wrapping the tab (§23.9); Connect/Disconnect are handled
 on the hero and never surface an uncaught transport error.
 
-On app open the nearest IDL0 **auto-connects** once (the "headphones"
-model), so the common case needs no tap; a manual **Disconnect** then
-stays disconnected for the session rather than reconnecting.
+While disconnected (and the app is foregrounded), the app **auto-connects** to
+the nearest IDL0 on a steady scan cadence (the "headphones" model), so the
+common case needs no tap — powering a device on connects it, and an unexpected
+BLE drop reconnects on its own. Two paths opt out: a manual **Disconnect**
+parks the scanner for the session (so "disconnect" means disconnect, re-armed
+by a manual scan), and the OTA push parks it around its own reboot-reconnect
+(§27.7) so the two never race for the link. Scanning is foreground-only — a
+backgrounded BLE scan is OS-throttled and would only drain the battery.
 
 A device **dropdown** (`StatusDropdownTrigger`) on the hero opens the
 device **picker** sheet — the single surface for choosing / disconnecting

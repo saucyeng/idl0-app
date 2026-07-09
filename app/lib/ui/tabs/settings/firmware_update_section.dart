@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/exceptions.dart';
+import '../../../providers/auto_connect.dart';
 import '../../../providers/device_provider.dart';
 import '../../../providers/firmware_update_provider.dart';
 import '../../../providers/mode.dart';
@@ -105,7 +106,6 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
   int _sentBytes = 0;
   int _totalBytes = 0;
   PushFirmwareHandle? _activeHandle;
-  Timer? _rebootTimer;
   String? _errorMessage;
   bool _userCanceled = false;
 
@@ -132,7 +132,9 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
 
   @override
   void dispose() {
-    _rebootTimer?.cancel();
+    // The OTA reconnect (reconnectAfterReboot) is intentionally detached: it
+    // runs on DeviceNotifier and completes — resuming the scanner — even if
+    // this panel is disposed mid-reconnect.
     super.dispose();
   }
 
@@ -266,6 +268,11 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
       _activeHandle = null;
 
       if (!mounted) return;
+      // The device reboots into the new image now. Park the auto-connect
+      // scanner so it can't race the OTA reconnect below — that path owns
+      // re-establishing the link and firing the armed auto-confirm. Resumed
+      // when reconnectAfterReboot finishes (see _scheduleReconnect).
+      ref.read(autoConnectControllerProvider.notifier).pause();
       // Arm the post-reboot OTA auto-confirm before the reconnect timer
       // fires — only when the pushed version is known (catalog releases;
       // never a manual .bin pick). See §27.7. If the section was disposed
@@ -327,15 +334,27 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
   }
 
   void _scheduleReconnect() {
-    _rebootTimer?.cancel();
-    _rebootTimer = Timer(_rebootHoldDuration, () async {
-      if (!mounted) return;
+    // Capture the notifiers up front: this reconnect should finish even if the
+    // user leaves Settings, so it must not touch `ref` after a dispose.
+    final device = ref.read(deviceProvider.notifier);
+    final autoConnect = ref.read(autoConnectControllerProvider.notifier);
+    unawaited(() async {
       try {
-        await ref.read(deviceProvider.notifier).disconnect();
-        await ref.read(deviceProvider.notifier).connect();
-      } on Object {
-        // Reconnect is best-effort — user can manually reconnect from the
-        // Device tab if scan fails after the reboot.
+        // A single post-hold connect() is too fragile for the device's
+        // post-OTA boot — one missed advertising window and the user is stuck
+        // reconnecting by hand. reconnectAfterReboot waits out the boot then
+        // retries the scan/connect, and its connect() drives the post-reboot
+        // status frame the armed auto-confirm consumes. See §27.7.
+        await device.reconnectAfterReboot(
+          bootDelay: _rebootHoldDuration,
+          retryDelay: const Duration(seconds: 2),
+          maxAttempts: 4,
+        );
+      } finally {
+        // Hand reconnection back to the background scanner. Also covers the
+        // give-up case: if the device never returned, the scanner keeps trying
+        // rather than leaving the user stranded on a dead panel.
+        autoConnect.resume();
       }
       if (!mounted) return;
       setState(() {
@@ -344,7 +363,7 @@ class _FirmwareUpdateSectionState extends ConsumerState<FirmwareUpdateSection> {
         _sentBytes = 0;
         _totalBytes = 0;
       });
-    });
+    }());
   }
 
   Future<void> _confirmOta() async {

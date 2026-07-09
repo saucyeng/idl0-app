@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/exceptions.dart';
+import '../../../providers/auto_connect.dart';
 import '../../../providers/device_provider.dart';
 import '../../brand/brand.dart';
 
@@ -39,6 +40,9 @@ class _DevicePickerBodyState extends ConsumerState<_DevicePickerBody> {
 
   Future<void> _scan() async {
     setState(() => _busy = true);
+    // Re-arm auto-connect: a manual scan clears any earlier user Disconnect
+    // that parked the background scanner, so future drops recover on their own.
+    ref.read(autoConnectControllerProvider.notifier).resume();
     try {
       await ref.read(deviceProvider.notifier).connect();
       if (mounted) Navigator.of(context).maybePop();
@@ -55,6 +59,9 @@ class _DevicePickerBodyState extends ConsumerState<_DevicePickerBody> {
 
   Future<void> _disconnect() async {
     setState(() => _busy = true);
+    // Park the background scanner first, so a user Disconnect stays
+    // disconnected instead of the loop immediately reconnecting the device.
+    ref.read(autoConnectControllerProvider.notifier).pause();
     try {
       await ref.read(deviceProvider.notifier).disconnect();
     } on Object catch (e) {
