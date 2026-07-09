@@ -145,6 +145,25 @@ class CargoKitPlugin implements Plugin<Project> {
                 platforms.add("android-x64")
             }
 
+            // Optional narrowing: set `cargokitDebugAbis` in gradle.properties
+            // (comma-separated Android ABI names, e.g. "arm64-v8a") to skip
+            // cross-compiling debug builds for ABIs you don't need (e.g. x86
+            // emulator targets). Falls back to the full list above if the
+            // filter would otherwise remove every platform.
+            if (buildType == "debug" && project.hasProperty("cargokitDebugAbis")) {
+                def flutterNameToAbi = [
+                    "android-arm": "armeabi-v7a",
+                    "android-arm64": "arm64-v8a",
+                    "android-x86": "x86",
+                    "android-x64": "x86_64",
+                ]
+                def allowedAbis = project.property("cargokitDebugAbis").toString().split(",").collect { it.trim() }
+                def filtered = platforms.findAll { allowedAbis.contains(flutterNameToAbi[it]) }
+                if (!filtered.isEmpty()) {
+                    platforms = filtered
+                }
+            }
+
             // The task name depends on plugin properties, which are not available
             // at this point
             project.getGradle().afterProject {
