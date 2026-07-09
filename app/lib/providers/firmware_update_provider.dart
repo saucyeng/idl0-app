@@ -81,7 +81,38 @@ class FirmwareCheckUnknown extends FirmwareUpdateState {
 /// Compares the device's running firmware against the hosted latest.
 class FirmwareUpdateNotifier extends Notifier<FirmwareUpdateState> {
   @override
-  FirmwareUpdateState build() => const FirmwareIdle();
+  FirmwareUpdateState build() {
+    // The update verdict is a function of the *live* device — its reported
+    // firmware version and BLE link — not a value that stays true once
+    // computed. Re-derive it whenever those inputs change so a verdict can
+    // never outlive the state that produced it. Without this the state is a
+    // one-shot snapshot from the last [check] that lingers across a
+    // disconnect and an OTA reboot, leaving the hero banner offering the
+    // very build the device just installed. See §27.7.
+    ref.listen(
+      deviceProvider.select((d) => (d.isConnected, d.firmwareVersion)),
+      (prev, next) {
+        final connected = next.$1;
+        final version = next.$2;
+        if (!connected || version == null) {
+          // No connected device with a known version — nothing to offer.
+          // Cleared unconditionally (independent of the auto-check setting):
+          // a stale verdict must never outlive its device.
+          state = const FirmwareIdle();
+          return;
+        }
+        // Connected with a known version. Re-check when the version first
+        // appears or changes — e.g. the device returns post-OTA running the
+        // new build — gated on the user's auto-check preference, the same
+        // gate the Settings panel's initial check uses.
+        final versionChanged = prev == null || prev.$2 != version;
+        if (versionChanged && ref.read(settingsProvider).autoCheckFirmware) {
+          check();
+        }
+      },
+    );
+    return const FirmwareIdle();
+  }
 
   /// Runs an update check for the user's selected channel. Never throws —
   /// failures resolve to [FirmwareCheckUnknown].

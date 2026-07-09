@@ -35,6 +35,17 @@ class _StubDeviceNotifier extends DeviceNotifier {
   DeviceState build() => _initial;
 }
 
+/// Device stub whose state can be mutated after build, so tests can drive the
+/// firmware-update notifier's reactive re-derivation (connect / disconnect /
+/// version change). See §27.7.
+class _MutableDeviceNotifier extends DeviceNotifier {
+  final DeviceState _initial;
+  _MutableDeviceNotifier(this._initial);
+  @override
+  DeviceState build() => _initial;
+  void emit(DeviceState next) => state = next;
+}
+
 FirmwareRelease _rel(String v) => FirmwareRelease(
       version: Version.parse(v),
       channel: FirmwareChannel.stable,
@@ -89,7 +100,8 @@ void main() {
     );
   });
 
-  test('check — hosted older than device — FirmwareAheadOfChannel with '
+  test(
+      'check — hosted older than device — FirmwareAheadOfChannel with '
       'both versions', () async {
     // Arrange
     final c = _container(
@@ -150,5 +162,63 @@ void main() {
 
     // Assert
     expect(c.read(firmwareUpdateProvider), isA<FirmwareCheckUnknown>());
+  });
+
+  test('device disconnects — stale Available verdict resets to FirmwareIdle',
+      () async {
+    // Arrange — a live verdict of "update available".
+    final c = ProviderContainer(
+      overrides: [
+        firmwareCatalogProvider
+            .overrideWithValue(_FakeCatalog(result: _rel('1.5.0'))),
+        deviceProvider.overrideWith(
+          () => _MutableDeviceNotifier(
+            const DeviceState(isConnected: true, firmwareVersion: '1.4.0'),
+          ),
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+    await c.read(firmwareUpdateProvider.notifier).check();
+    expect(c.read(firmwareUpdateProvider), isA<FirmwareUpdateAvailable>());
+
+    // Act — the BLE link drops (OTA reboot, out of range).
+    (c.read(deviceProvider.notifier) as _MutableDeviceNotifier)
+        .emit(const DeviceState());
+    await pumpEventQueue();
+
+    // Assert — the banner-driving verdict clears; it cannot outlive its device.
+    expect(c.read(firmwareUpdateProvider), isA<FirmwareIdle>());
+  });
+
+  test(
+      'device returns on the pushed build — re-derives from Available to '
+      'UpToDate without a manual check', () async {
+    // Arrange — "update available" for a device on 1.4.0, catalog serves 1.5.0.
+    final c = ProviderContainer(
+      overrides: [
+        firmwareCatalogProvider
+            .overrideWithValue(_FakeCatalog(result: _rel('1.5.0'))),
+        deviceProvider.overrideWith(
+          () => _MutableDeviceNotifier(
+            const DeviceState(isConnected: true, firmwareVersion: '1.4.0'),
+          ),
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+    await c.read(firmwareUpdateProvider.notifier).check();
+    expect(c.read(firmwareUpdateProvider), isA<FirmwareUpdateAvailable>());
+
+    // Act — the device reboots post-OTA and returns running 1.5.0. The reactive
+    // re-check fires on the version change (auto-check defaults on).
+    (c.read(deviceProvider.notifier) as _MutableDeviceNotifier).emit(
+      const DeviceState(isConnected: true, firmwareVersion: '1.5.0'),
+    );
+    // Let the fire-and-forget check() started by the listener settle.
+    await pumpEventQueue();
+
+    // Assert — now up to date, no stale "update available".
+    expect(c.read(firmwareUpdateProvider), isA<FirmwareUpToDate>());
   });
 }

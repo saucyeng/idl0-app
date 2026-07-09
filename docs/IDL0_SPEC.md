@@ -2625,6 +2625,13 @@ downloads the `.bin` into memory — optionally verifying a published
 (`esp_ota_end`) remains the authoritative integrity gate; the app-side check is
 a fast-fail.
 
+The verdict is a function of the live device, not a value that stays true once
+computed: it clears when the device disconnects, and a connected device whose
+reported version changes (e.g. it returns on the pushed build after an OTA
+reboot) triggers a fresh check. A stale "update available" banner therefore
+never outlives the link or the build that produced it — the Device-hero banner
+is additionally gated on an active connection.
+
 **Auto-confirm.** After a catalog-driven update push completes and the device
 reboots, the app arms a one-shot auto-confirm expectation carrying the pushed
 release's version. The first version-bearing status frame received after the

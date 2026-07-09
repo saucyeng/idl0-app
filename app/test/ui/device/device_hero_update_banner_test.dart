@@ -14,6 +14,11 @@ class _ConnectedDevice extends DeviceNotifier {
       const DeviceState(isConnected: true, deviceName: 'IDL0-A3F2');
 }
 
+class _DisconnectedDevice extends DeviceNotifier {
+  @override
+  DeviceState build() => const DeviceState();
+}
+
 class _AvailableUpdate extends FirmwareUpdateNotifier {
   _AvailableUpdate(this._state);
   final FirmwareUpdateState _state;
@@ -79,6 +84,34 @@ void main() {
           deviceProvider.overrideWith(_ConnectedDevice.new),
           firmwareUpdateProvider.overrideWith(
             () => _AvailableUpdate(FirmwareUpToDate(Version.parse('1.5.0'))),
+          ),
+        ],
+        child: const MaterialApp(home: Scaffold(body: DeviceHeroCard())),
+      ),
+    );
+    await tester.pump();
+
+    // Assert
+    expect(find.textContaining('Firmware update available'), findsNothing);
+  });
+
+  testWidgets(
+      'no banner when disconnected even if the verdict is still Available '
+      '(§27.7 — a banner only means anything for a live device)',
+      (tester) async {
+    // Arrange — an Available verdict paired with a disconnected device, the
+    // transient window between a link drop and the provider re-deriving.
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          deviceProvider.overrideWith(_DisconnectedDevice.new),
+          firmwareUpdateProvider.overrideWith(
+            () => _AvailableUpdate(
+              FirmwareUpdateAvailable(
+                Version.parse('1.4.0'),
+                _release('1.5.0'),
+              ),
+            ),
           ),
         ],
         child: const MaterialApp(home: Scaffold(body: DeviceHeroCard())),

@@ -106,8 +106,11 @@ class _DeviceHeroCardState extends ConsumerState<DeviceHeroCard> {
 
     // A firmware update, when available, surfaces as a compact banner above
     // the hero content (§27.7); tapping it routes to Settings → Firmware.
+    // Gated on a live link: an "update available" banner only means anything
+    // for a connected device, and this closes the one-frame window between a
+    // disconnect and the update provider re-deriving to idle. See §27.7.
     final update = ref.watch(firmwareUpdateProvider);
-    final Widget child = update is FirmwareUpdateAvailable
+    final Widget child = device.isConnected && update is FirmwareUpdateAvailable
         ? Column(
             mainAxisSize: MainAxisSize.min,
             children: [
