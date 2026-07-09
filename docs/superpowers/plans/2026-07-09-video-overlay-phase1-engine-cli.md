@@ -25,24 +25,24 @@
 ### Task 1: SPEC section (spec-first gate)
 
 **Files:**
-- Modify: `c:\Users\isaac\Documents\Saucy\saucyeng\idl0-app\docs\IDL0_SPEC.md` (append new §31 after §30; add TOC entry)
+- Modify: `c:\Users\isaac\Documents\Saucy\saucyeng\idl0-app\docs\IDL0_SPEC.md` (append new §33 after §30; add TOC entry)
 
 **Interfaces:**
 - Produces: the normative contract every later task implements. No code.
 
-- [ ] **Step 1: Append §31 to the spec**
+- [ ] **Step 1: Append §33 to the spec**
 
-Add to the Table of Contents: `§31 Video Overlay (engine + CLI)`. Append at the end of the spec:
+Add to the Table of Contents: `§33 Video Overlay (engine + CLI)`. Append at the end of the spec:
 
 ```markdown
-## 31. Video Overlay (engine + CLI)
+## 33. Video Overlay (engine + CLI)
 
 Phase 1 of the video feature (design doc
 `docs/superpowers/specs/2026-07-08-video-overlay-design.md`): headless
 burned-in overlay export. App data layer (workspace v8 links) and UI are
 phases 2–3 and are NOT described here yet.
 
-### 31.1 Overlay model (canvas-agnostic)
+### 33.1 Overlay model (canvas-agnostic)
 
 `overlay::model::OverlayLayout` — stored in the workbook (`.idl0wb`,
 `workbook_version: 2`, additive field `overlay_layouts`). Elements: `gauge`
@@ -55,7 +55,7 @@ Channel references resolve like charts (raw, synthesized, math); a missing
 channel degrades that element to its no-data state (`—`), never fails the
 render.
 
-### 31.2 Sampling
+### 33.2 Sampling
 
 `overlay::sample::SampleContext::prepare(handle, layout, laps)` materializes
 referenced channels once; `sample(t_secs)` returns a `FrameSample` (gauge
@@ -64,7 +64,7 @@ to the session track bbox, lap state). Rate-based channels interpolate
 linearly; event-driven channels carry forward. `t` outside a channel's span →
 no-data.
 
-### 31.3 GPMF & sync
+### 33.3 GPMF & sync
 
 `video::mp4box` walks ISO-BMFF (no ffmpeg): `gpmd` sample payloads with
 video-relative timestamps, `mvhd creation_time`, video-track
@@ -76,14 +76,14 @@ else `creation_time` (confidence 0.3). Manual offsets always win; rendering
 never re-estimates. Video/session overlap is validated — none → typed error
 listing both ranges.
 
-### 31.4 Rendering
+### 33.4 Rendering
 
 `video::render::render_overlay_frame(layout, sample, w, h)` → straight
 (un-premultiplied) RGBA bytes via tiny-skia; text via embedded IBM Plex Mono
 (OFL). Deterministic (golden-image tested). The video compositor is the first
 consumer of the overlay model, not its owner.
 
-### 31.5 Export driver (`video-export` crate)
+### 33.5 Export driver (`video-export` crate)
 
 The only process-spawning component. `ffprobe` (JSON) probes width/height/
 fps/duration/rotation/audio; `ffmpeg` receives rendered frames as a second
@@ -93,7 +93,7 @@ Output writes to `<out>.part`, renamed on success. VFR input is normalized to
 CFR; rotation metadata is applied at probe time. Progress = frames fed /
 total; cancel kills the child and removes the `.part`.
 
-### 31.6 CLI
+### 33.6 CLI
 
 - `idl-rs overlay <session.idl0> --video <v.mp4> --workbook <w.idl0wb>
   [--layout <name>] [--track <t.idl0t>] [--offset <s>] [--start <s>]
@@ -114,7 +114,7 @@ total; cancel kills the child and removes the `.part`.
 ```bash
 cd c:\Users\isaac\Documents\Saucy\saucyeng\idl0-app
 git add docs/IDL0_SPEC.md
-git commit -m "SPEC §31: video overlay engine + CLI (phase 1, spec-first)"
+git commit -m "SPEC §33: video overlay engine + CLI (phase 1, spec-first)"
 ```
 
 ---
@@ -235,7 +235,7 @@ Expected: compile error — `overlay` module does not exist.
 ```rust
 //! Canvas-agnostic overlay system: positioned, channel-bound elements sampled
 //! at a time. The video compositor (`video::render`) is the first consumer;
-//! chart-canvas overlays are future work. See docs/IDL0_SPEC.md §31.
+//! chart-canvas overlays are future work. See docs/IDL0_SPEC.md §33.
 
 pub mod model;
 pub mod sample;
@@ -249,7 +249,7 @@ pub mod sample;
 //! Overlay layout model. Stored in the workbook (`.idl0wb` v2,
 //! `overlay_layouts`); rects are normalized [x, y, w, h] canvas fractions;
 //! `canvas` ("1920x1080") is design-space for stroke/font scaling only.
-//! See docs/IDL0_SPEC.md §31.1.
+//! See docs/IDL0_SPEC.md §33.1.
 
 use serde::{Deserialize, Serialize};
 
@@ -362,7 +362,7 @@ Expected: 4 passed.
 ```bash
 cd c:\Users\isaac\Documents\Saucy\saucyeng\idl-rs
 cargo fmt && git add core/src/overlay core/src/lib.rs
-git commit -m "overlay::model: canvas-agnostic layout types (SPEC 31.1)"
+git commit -m "overlay::model: canvas-agnostic layout types (SPEC 33.1)"
 ```
 
 ---
@@ -444,7 +444,7 @@ In `core/src/workbook/model.rs`:
 - Add to `Workbook`:
 
 ```rust
-    /// Overlay layouts (SPEC §31.1); empty when absent (v1 files).
+    /// Overlay layouts (SPEC §33.1); empty when absent (v1 files).
     #[serde(default)]
     pub overlay_layouts: Vec<crate::overlay::model::OverlayLayout>,
 ```
@@ -480,7 +480,7 @@ Expected: all pass.
 
 ```bash
 cargo fmt && git add core/src/workbook/model.rs
-git commit -m "workbook v2: overlay_layouts field + layout selection (SPEC 31.1)"
+git commit -m "workbook v2: overlay_layouts field + layout selection (SPEC 33.1)"
 ```
 
 ---
@@ -668,7 +668,7 @@ Key structure (complete the bodies exactly as described):
 
 ```rust
 //! Frame sampling for overlay rendering: prepare once, sample per frame.
-//! All `t` are session recording-time seconds. See docs/IDL0_SPEC.md §31.2.
+//! All `t` are session recording-time seconds. See docs/IDL0_SPEC.md §33.2.
 
 use std::collections::HashMap;
 
@@ -717,7 +717,7 @@ pub struct SampleContext {
 
 ```bash
 cargo fmt && git add core/src/overlay
-git commit -m "overlay::sample: SampleContext/FrameSample per-frame sampling (SPEC 31.2)"
+git commit -m "overlay::sample: SampleContext/FrameSample per-frame sampling (SPEC 33.2)"
 ```
 
 ---
@@ -868,7 +868,7 @@ Parsing skeleton — a cursor over `&[u8]` reading `(size: u32 BE, kind: [u8;4])
 
 ```bash
 cargo fmt && git add core/src/video core/src/lib.rs
-git commit -m "video::mp4box: ISO-BMFF walker for gpmd samples + container info (SPEC 31.3)"
+git commit -m "video::mp4box: ISO-BMFF walker for gpmd samples + container info (SPEC 33.3)"
 ```
 
 ---
@@ -944,7 +944,7 @@ fn parse_gpmf__truncated_klv__parse_error_not_panic() { /* feed half a KLV heade
 
 ```bash
 cargo fmt && git add core/src/video/gpmf.rs
-git commit -m "video::gpmf: GPMF KLV parser -> VideoTelemetry (SPEC 31.3)"
+git commit -m "video::gpmf: GPMF KLV parser -> VideoTelemetry (SPEC 33.3)"
 ```
 
 ---
@@ -1019,7 +1019,7 @@ fn estimate_sync__no_anchor_no_creation_time__parse_error() { /* both None → E
 
 ```bash
 cargo fmt && git add core/src/video/sync.rs
-git commit -m "video::sync: GPMF/creation-time offset estimation (SPEC 31.3)"
+git commit -m "video::sync: GPMF/creation-time offset estimation (SPEC 33.3)"
 ```
 
 ---
@@ -1081,7 +1081,7 @@ fn draw_text__hello_on_black__pixels_covered_and_deterministic() {
 
 ```bash
 cargo fmt && git add core/assets core/Cargo.toml core/src/video/render.rs Cargo.lock
-git commit -m "video::render: embedded IBM Plex Mono + text rasterization (SPEC 31.4)"
+git commit -m "video::render: embedded IBM Plex Mono + text rasterization (SPEC 33.4)"
 ```
 
 ---
@@ -1182,7 +1182,7 @@ git add core/tests/golden
 ```bash
 cargo test -p idl-rs
 cargo fmt && git add core/src/video/render.rs core/tests/golden
-git commit -m "video::render: element renderers + golden-image tests (SPEC 31.4)"
+git commit -m "video::render: element renderers + golden-image tests (SPEC 33.4)"
 ```
 
 ---
@@ -1338,7 +1338,7 @@ fn run_export__synthetic_input_e2e__produces_playable_mp4() {
 ```bash
 cargo test
 cargo fmt && git add video-export Cargo.toml Cargo.lock
-git commit -m "video-export: ffprobe/argv/driver sidecar-ffmpeg crate (SPEC 31.5)"
+git commit -m "video-export: ffprobe/argv/driver sidecar-ffmpeg crate (SPEC 33.5)"
 ```
 
 ---
@@ -1416,7 +1416,7 @@ VideoCmd::Sync { file, video, format } => {
 
 ```bash
 cargo fmt && git add cli
-git commit -m "cli: video probe + video sync subcommands (SPEC 31.6)"
+git commit -m "cli: video probe + video sync subcommands (SPEC 33.6)"
 ```
 
 ---
@@ -1511,7 +1511,7 @@ git commit -m "cli: video probe + video sync subcommands (SPEC 31.6)"
 ```bash
 cargo test
 cargo fmt && git add cli Cargo.lock
-git commit -m "cli: overlay export command wiring engine + video-export (SPEC 31.6)"
+git commit -m "cli: overlay export command wiring engine + video-export (SPEC 33.6)"
 ```
 
 ---
@@ -1523,7 +1523,7 @@ git commit -m "cli: overlay export command wiring engine + video-export (SPEC 31
 
 **Interfaces:** none — documentation.
 
-- [ ] **Step 1: design doc amendment** — in §"CLI" / §3 of the design doc, add `--track <t.idl0t>` to the `idl-rs overlay` signature with the sentence: "the lap panel needs laps; on the CLI they come from `detect_laps` + a track artifact (§29.2 precedent) — omitted → lap elements render no-data." (Implementation-discovered gap; spec §31.6 already includes it from Task 1.)
+- [ ] **Step 1: design doc amendment** — in §"CLI" / §3 of the design doc, add `--track <t.idl0t>` to the `idl-rs overlay` signature with the sentence: "the lap panel needs laps; on the CLI they come from `detect_laps` + a track artifact (§29.2 precedent) — omitted → lap elements render no-data." (Implementation-discovered gap; spec §33.6 already includes it from Task 1.)
 
 - [ ] **Step 2: CHANGELOG.md** — append under today's date:
 
@@ -1532,7 +1532,7 @@ git commit -m "cli: overlay export command wiring engine + video-export (SPEC 31
   GPMF parsing + UTC auto-sync, tiny-skia overlay rasterizer (IBM Plex Mono
   embedded), sidecar-ffmpeg `video-export` crate, and `idl-rs overlay` /
   `video sync` / `video probe` commands. Workbook v2: additive
-  `overlay_layouts`. SPEC §31. App phases (workspace links, Analyze panel)
+  `overlay_layouts`. SPEC §33. App phases (workspace links, Analyze panel)
   tracked in TASKS.
 ```
 
@@ -1552,7 +1552,7 @@ git commit -m "Docs: video overlay phase 1 shipped (engine + CLI); queue phases 
 
 ## Self-review checklist (ran at plan time)
 
-- **Spec coverage:** §31.1→Tasks 2–3; §31.2→Task 4; §31.3→Tasks 5–7; §31.4→Tasks 8–9; §31.5→Task 10; §31.6→Tasks 11–12; spec-first gate→Task 1; artifact rules→Task 13. Design-doc items deferred by design: drift term, WYSIWYG editor, Android export, bundled ffmpeg (future work — no tasks, correct).
+- **Spec coverage:** §33.1→Tasks 2–3; §33.2→Task 4; §33.3→Tasks 5–7; §33.4→Tasks 8–9; §33.5→Task 10; §33.6→Tasks 11–12; spec-first gate→Task 1; artifact rules→Task 13. Design-doc items deferred by design: drift term, WYSIWYG editor, Android export, bundled ffmpeg (future work — no tasks, correct).
 - **Known deviations from the design doc, both deliberate:** (1) `rayon` lives in `video-export`, not core — parallelism is the driver's concern; core stays lean. (2) `--track` added to the CLI (lap data source); recorded in Task 13's doc amendment.
 - **Type consistency:** `SampleContext::prepare(handle, layout, laps)` (T4) matches T12 step 8; `render_overlay_frame(layout, sample, polyline, w, h)` (T9) matches T12; `ExportPlan::ffmpeg_args(part_path)` (T10) matches its own tests; `Workbook::overlay_layout(Option<&str>) -> Result<&OverlayLayout, String>` (T3) matches T12 step 3's `CliError::usage` mapping.
 - **Test-name convention:** em-dash names are illegal Rust — Task 2 Step 1 note applies to all tasks (match the repo's existing double-underscore style).
