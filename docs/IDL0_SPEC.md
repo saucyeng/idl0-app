@@ -48,6 +48,8 @@
 | **PART 8 — DISTRIBUTION** | | |
 | 31 | Distribution | Build/release |
 | 32 | Open Source | Setup |
+| **PART 9 — VIDEO** | | |
+| 33 | Video Overlay (engine + CLI) | Video overlay tasks |
 
 ---
 
@@ -3100,6 +3102,83 @@ Build: `flutter build apk|web|windows|macos`
   - `saucyeng/idl-rs` — the pure-Rust processing engine (`idl-rs` core, `idl-rs-bridge` FRB shim, `idl-rs-cli`).
   - `saucyeng/idl0-firmware` — the ESP32-C6 firmware.
 - App repo structure: `app/` `rust/` (submodule) `tools/` `docs/`.
+
+---
+
+# PART 9 — VIDEO
+
+## 33. Video Overlay (engine + CLI)
+
+Phase 1 of the video feature (design doc
+`docs/superpowers/specs/2026-07-08-video-overlay-design.md`): headless
+burned-in overlay export. App data layer (workspace v8 links) and UI are
+phases 2–3 and are NOT described here yet.
+
+### 33.1 Overlay model (canvas-agnostic)
+
+`overlay::model::OverlayLayout` — stored in the workbook (`.idl0wb`,
+`workbook_version: 2`, additive field `overlay_layouts`). Elements: `gauge`
+(styles `numeric | bar | dial`; fields `channel`, `label`, `min`, `max`),
+`attitude` (styles `roll | steer`; fields `channel`, `range_deg`),
+`trace_strip` (`channels[]`, `window_s`), `track_map`, `lap_panel`. Rects are
+normalized `[x, y, w, h]` fractions of the canvas. `canvas` (`"1920x1080"`) is
+design-space for stroke/font scaling only — never an output resolution.
+Channel references resolve like charts (raw, synthesized, math); a missing
+channel degrades that element to its no-data state (`—`), never fails the
+render.
+
+### 33.2 Sampling
+
+`overlay::sample::SampleContext::prepare(handle, layout, laps)` materializes
+referenced channels once; `sample(t_secs)` returns a `FrameSample` (gauge
+values, trace windows normalized to session min/max, GPS position normalized
+to the session track bbox, lap state). Rate-based channels interpolate
+linearly; event-driven channels carry forward. `t` outside a channel's span →
+no-data.
+
+### 33.3 GPMF & sync
+
+`video::mp4box` walks ISO-BMFF (no ffmpeg): `gpmd` sample payloads with
+video-relative timestamps, `mvhd creation_time`, video-track
+width/height/fps/duration. `video::gpmf` parses GPMF KLV (`DEVC`→`STRM`→
+`GPS5|GPS9` with `SCAL`/`GPSU`) → `VideoTelemetry`. `video::sync::
+estimate_sync` returns `SyncEstimate { offset_s, confidence, method }`:
+`gpmf` (UTC anchor vs `GPS_EpochMs`-anchored session clock, confidence 0.9)
+else `creation_time` (confidence 0.3). Manual offsets always win; rendering
+never re-estimates. Video/session overlap is validated — none → typed error
+listing both ranges. `session_time_s = video_time_s + sync_offset_s`.
+
+### 33.4 Rendering
+
+`video::render::render_overlay_frame(layout, sample, w, h)` → straight
+(un-premultiplied) RGBA bytes via tiny-skia; text via embedded IBM Plex Mono
+(OFL). Deterministic (golden-image tested). The video compositor is the first
+consumer of the overlay model, not its owner.
+
+### 33.5 Export driver (`video-export` crate)
+
+The only process-spawning component. `ffprobe` (JSON) probes width/height/
+fps/duration/rotation/audio; `ffmpeg` receives rendered frames as a second
+rawvideo RGBA input piped to stdin, `filter_complex overlay`, audio
+stream-copied, `libx264` default (`--encoder` overrides), `+faststart`.
+Output writes to `<out>.part`, renamed on success. VFR input is normalized to
+CFR; rotation metadata is applied at probe time. Progress = frames fed /
+total; cancel kills the child and removes the `.part`.
+
+### 33.6 CLI
+
+- `idl-rs overlay <session.idl0> --video <v.mp4> --workbook <w.idl0wb>
+  [--layout <name>] [--track <t.idl0t>] [--offset <s>] [--start <s>]
+  [--duration <s>] [--output <out.mp4>] [--encoder <name>] [--ffmpeg <path>]`
+  — bulk command (§29.7 envelope: artifact on success, error envelope on
+  stderr). `--layout` optional only when the workbook has exactly one layout.
+  `--track` enables the lap panel; without it lap elements render no-data.
+  `--offset` skips auto-sync. Math channels are applied (`apply_workbook`)
+  before sampling.
+- `idl-rs video sync <session.idl0> --video <v.mp4>` — structured command:
+  offset/confidence/method (text or `--format json`).
+- `idl-rs video probe --video <v.mp4>` — structured command: container info +
+  GPMF presence (pure-Rust walker; no ffprobe).
 
 ---
 
