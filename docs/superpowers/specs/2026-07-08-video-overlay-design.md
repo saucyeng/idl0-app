@@ -65,9 +65,25 @@ quarantined in a small driver crate that spawns a sidecar `ffmpeg` process.
 |---|---|
 | `video::gpmf` | Demux the `gpmd` track from MP4 (pure-Rust `mp4` crate) and parse GPMF KLV → `VideoTelemetry` (UTC anchor, GPS fixes at video-relative timestamps, camera IMU). |
 | `video::sync` | `estimate_sync(telemetry, session) → SyncEstimate { offset_s, confidence, method }`. GPMF UTC vs the session's GPS-anchored wall clock (`GPS_EpochMs`); fallback MP4 `creation_time`. **No signal-correlation refinement** — precision beyond ~1 s is manual (see §5). |
-| `video::overlay` | `OverlayLayout` model — `Gauge`, `TraceStrip`, `TrackMap`, `LapPanel`, `Attitude` elements: normalized rect, channel references, style fields. JSON (de)serialization for the workbook. |
-| `video::sample` | `(session handle, layout, t_video, offset) → FrameSample` — the values / trace window / GPS position / lap state one frame needs. Rides on the existing derived-channel store + math eval. |
-| `video::render` | `render_overlay_frame(layout, sample, w, h) → RGBA` via `tiny-skia`; text via an embedded IBM Plex subset (OFL). Deterministic → golden-image testable; frames are independent → rayon-parallel. |
+| `overlay::model` | `OverlayLayout` — `Gauge`, `TraceStrip`, `TrackMap`, `LapPanel`, `Attitude` elements: normalized rect, channel references, style fields. JSON (de)serialization for the workbook. **Canvas-agnostic by design** (see "One overlay model" below) — lives beside, not under, `video`. |
+| `overlay::sample` | `(session handle, layout, t) → FrameSample` — the values / trace window / GPS position / lap state one instant needs. Rides on the existing derived-channel store + math eval. Video passes `t = video_time + offset`; a future chart canvas passes the worksheet cursor. |
+| `video::render` | `render_overlay_frame(layout, sample, w, h) → RGBA` via `tiny-skia`; text via an embedded IBM Plex subset (OFL). Deterministic → golden-image testable; frames are independent → rayon-parallel. The video compositor is the *first consumer* of `overlay::{model,sample}`, not their owner. |
+
+**One overlay model, many canvases (renderers stay separate).** An overlay is
+*positioned, channel-bound elements sampled at a time* — nothing about that is
+video-specific, and the long-deferred `WorksheetBlock.placement: overlay`
+follow-up ("anything beside/over anything", Modular-tables Plan 2) is a second
+canvas for the same model: chart overlays would reuse `overlay::{model,sample}`
+with `t = worksheet cursor`, composited by **Flutter** (hit-testable,
+DPI-native, resize-fluid) rather than tiny-skia. The compositors are
+deliberately not unified: tiny-skia is required for headless/export, Flutter is
+required for interactive chart chrome, and **pixel parity between the two is a
+non-goal** — the WYSIWYG guarantee is scoped to video preview-vs-export (same
+tiny-skia renderer). Consequently the layout schema must not bake in a fixed
+aspect: `canvas` is design-space for stroke/font scaling only; on video the
+canvas aspect is fixed so normalized rects are exact, while a chart canvas
+reflows elements as widgets with anchors/constraints. Chart-canvas overlays are
+**future work, not v1** — v1 ships the video canvas only.
 
 ### `rust/video-export` (new crate)
 
@@ -191,7 +207,7 @@ visible on camera — exact sync, trivially verifiable, later auto-detectable.
    Out-of-overlap frames render elements in a "no data" state (dimmed / `—`).
    `--start`/`--duration` map to ffmpeg `-ss`/`-t` with the overlay clock
    offset accordingly — the fast iterate-on-a-clip loop.
-3. **Frame loop**: `t_video = start + i/fps` → `video::sample` →
+3. **Frame loop**: `t_video = start + i/fps` → `overlay::sample` →
    `video::render` on a rayon pool, delivered in order through a bounded queue
    (backpressure) → ffmpeg stdin as rawvideo RGBA.
 4. **One ffmpeg invocation**: input 0 = source (decode), input 1 = RGBA pipe;
@@ -288,7 +304,7 @@ Scaled deliberately — no real camera recordings exist yet.
 
 ## 10. Phasing
 
-1. **Engine + CLI** — `video::{gpmf,sync,overlay,sample,render}`,
+1. **Engine + CLI** — `overlay::{model,sample}`, `video::{gpmf,sync,render}`,
    `video-export` driver, `idl-rs overlay|video sync|video probe`. Headless,
    fully testable, delivers export-first.
 2. **App data layer** — `.idl0w` v8 links, workbook v2 layouts, GPMF auto-sync
@@ -312,6 +328,10 @@ lands (phase 2+).
 
 ## 12. Future work (recorded, not v1)
 
+- **Chart-canvas overlays**: honour `WorksheetBlock.placement: overlay` by
+  compositing `overlay::model` elements over charts in Flutter, sampled at the
+  worksheet cursor — unifies the Modular-tables Plan-2 deferred item with this
+  feature's element model. Tables become a natural overlay element type here.
 - Session-start LED blink for exact sync (next hardware iteration); later
   auto-detection of the blink in footage.
 - WYSIWYG overlay layout editor in-app.
