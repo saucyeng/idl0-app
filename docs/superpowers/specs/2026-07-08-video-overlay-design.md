@@ -95,9 +95,13 @@ once. Core purity is preserved.
 
 ### `rust/cli`
 
-- `idl-rs overlay --session s.idl0 --video v.mp4 --workbook w.idl0wb [--layout <name>] [--offset 12.34] [--start T --duration D] [--encoder X] [--ffmpeg PATH]`
+- `idl-rs overlay --session s.idl0 --video v.mp4 --workbook w.idl0wb [--layout <name>] [--track t.idl0t] [--offset 12.34] [--start T --duration D] [--encoder X] [--ffmpeg PATH]`
   — `--layout` may be omitted when the workbook holds exactly one layout;
   with several, omitting it is an error listing the available names.
+  `--track` feeds the lap panel: on the CLI laps come from `detect_laps` +
+  a track artifact (the FIT-export precedent); omitted → lap elements
+  render no-data. *(Added at implementation: the original signature had no
+  lap source.)*
 - `idl-rs video sync` — print estimated offset + confidence.
 - `idl-rs video probe` — dimensions/fps/duration/telemetry presence.
 

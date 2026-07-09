@@ -10,7 +10,31 @@ Log file schema versions and app versions are independent. Both are noted where 
 
 ## [Unreleased]
 
+### Added
+
+- **Video overlay phase 1 — engine + CLI (2026-07-09).** Headless burned-in
+  telemetry overlay export. Canvas-agnostic overlay system in the engine
+  (`overlay::model` — gauge / attitude / trace-strip / track-map / lap-panel
+  elements on normalized rects; `overlay::sample` — prepare-once,
+  sample-per-frame); `video::mp4box` (hand-rolled ISO-BMFF walker — the `mp4`
+  crate rejects `gpmd` tracks), `video::gpmf` (GPMF KLV → telemetry),
+  `video::sync` (GPMF-UTC / creation-time offset estimation), `video::render`
+  (tiny-skia rasterizer, embedded IBM Plex Mono, golden-image tested). New
+  `idl-rs-video-export` crate is the only process-spawning component (ffprobe
+  probe, sidecar-ffmpeg composite/encode, `.part` hygiene, progress + cancel)
+  — verified end-to-end against ffmpeg 8.1.2. CLI: `idl-rs overlay`,
+  `idl-rs video sync`, `idl-rs video probe`. Workbook v2: additive
+  `overlay_layouts` (v1 files unaffected). **Spec disposition:** spec-first —
+  SPEC §33 (new PART 9) landed before code; design doc
+  `docs/superpowers/specs/2026-07-08-video-overlay-design.md`. App phases
+  (workspace v8 video links, Analyze panel, live overlay, export dialog)
+  queued in TASKS.
+
 ### Fixed
+
+- **"Update available" banner went stale — it survived a disconnect and lingered after the device returned on the pushed build (2026-07-09).** `firmwareUpdateProvider` computed its verdict only inside `check()` (Settings-panel open, channel switch, "Check now") and never re-derived, so the state was a one-shot snapshot. After a v0.1.0→v0.1.1-beta.1 OTA the banner kept offering the very build the device had just installed: the OTA reboot dropped the link but nothing reset the verdict, and no code re-ran `check()` when the device reconnected on the new version. Found during v0.1.0 hardware bring-up. The notifier now re-derives reactively from the live device (`ref.listen` on `(isConnected, firmwareVersion)`): it clears to `FirmwareIdle` on disconnect (unconditional — a verdict must not outlive its device) and re-checks when a connected device's version first appears or changes (gated on the auto-check setting), so the device returning post-OTA refreshes the verdict on its own. The Device-hero banner is additionally gated on `isConnected`, closing the one-frame window between a drop and the re-derive. **Spec disposition:** spec-during — §27.7 Flow gains the verdict-lifecycle paragraph.
+
+- **Android debug builds cross-compiled `idl_rs_bridge` for 3 ABIs when only arm64 is used (2026-07-09).** Cargokit's vendored gradle plugin (`app/rust_builder/cargokit/gradle/plugin.gradle`) unconditionally appended `android-x86` and `android-x64` to the debug target list — mirroring stock Flutter's own emulator-support behavior — regardless of the connected device's actual ABI, so every debug build cross-compiled the Rust engine three times over. Added an opt-in `cargokitDebugAbis` gradle property (set to `arm64-v8a` in `app/android/gradle.properties`) that filters the debug platform list, with a fallback to the unfiltered list if the filter would leave it empty; delete the property (or add `x86_64`) to restore x86 emulator support. Verified via `flutter build apk --debug`: only `aarch64-linux-android` is now built for `idl_rs_bridge` (unrelated plugins vendoring their own cargokit copy — `irondash_engine_context_native`, `super_native_extensions` — are unaffected, out of scope). **Spec disposition:** no spec change needed — build tooling only.
 
 - **WiFi OTA push hung on Android — never waited for the bind, then couldn't recover (2026-07-08).** Two linked defects, found and fixed during v0.1.0 hardware bring-up:
   - **Primary: the OTA push didn't wait for the WiFi link to converge.** `switchTo(Mode.wifi)` only flips the mode; the bind is a *reactive*, seconds-long consequence (`WifiBindController` scans + associates + brings up the loopback proxy). The download path gates on this via `SyncController._awaitLinked`, but the OTA `_push` fired `pushFirmware` immediately — reading the binder's `deviceBaseUrl` before the proxy port was set and getting the direct `192.168.4.1`, which black-holes on Android. Confirmed on-device: `proxy up on 127.0.0.1:… -> 192.168.4.1:80` with no proxy-accept and no firmware `/ota` line. Fixed by adding a reusable `WifiBindController.awaitLinked()` and gating `_push` on it (refuses with a clear error if the link never comes up).

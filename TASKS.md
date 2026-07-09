@@ -8,6 +8,27 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
 
 ## Active / awaiting hardware verification
 
+- [ ] **Video overlay phase 2 — app data layer (2026-07-09)** — per the
+      design doc (`docs/superpowers/specs/2026-07-08-video-overlay-design.md`)
+      and SPEC §33: `.idl0w` v7→v8 `videos[]` link entries (path, size+mtime
+      re-link validation, `sync_offset_s`, `sync_method`, confidence, label),
+      Dart workbook v2 model for `overlay_layouts` (write side; engine reads
+      it already), GPMF auto-sync at link time via the bridge
+      (`read_gpmd_samples` + `parse_gpmf` + `estimate_sync` are engine-side).
+      Spec-during: SPEC §11.4/§15 (workspace v8) + §17a (workbook v2).
+      Android note: resolve `content://` picks to an fd/copy before engine
+      demux (design doc §7).
+
+- [ ] **Video overlay phase 3 — app UI (2026-07-09)** — Analyze video panel
+      as a worksheet slot kind (media_kit), cursor↔playback sync through the
+      §26.7 synchronized-cursor contract, live overlay preview via
+      `render_overlay_frame` (panel-sized), manual sync mode (audio scrub +
+      ±nudges), desktop export dialog over `idl-rs-video-export` with FRB
+      progress stream + ffmpeg-path Setting. Spec-during: §26 (panel), §27
+      (Setting). **Adoption gate:** media_kit version must ship 16 KB
+      page-size-aligned Android libs. FRB codegen rerun required when the
+      bridge surface lands.
+
 - [ ] **OTA hardware E2E against the first GitHub release (2026-07-06)** — after
       `v0.1.0` is cut: USB-flash once (rollback bootloader; temporary
       uncommitted `version.txt` = `0.0.1`), confirm the update card
@@ -1347,14 +1368,12 @@ based on impact + brainstorm-readiness.
       New `ChartType.scatter`. Architectural: density rendering
       (point vs. heatmap), down-sampling rules, when to switch from
       points to hexbin.
-- [ ] **Synchronized video channel** *(spec-first — new architectural
-      surface; biggest scope)* — video file linked to a session,
-      synced to the worksheet cursor for play/pause/scrub. Touches
-      data layer (new entity, file storage, sync offset metadata),
-      UI (player widget, scrub bar, time-base reconciliation),
-      transport (import + maybe Drive sync of the video file). Needs
-      its own design doc before queue
-      decomposition.
+- [x] **Synchronized video channel** *(spec-first)* — superseded by the
+      video overlay design doc
+      (`docs/superpowers/specs/2026-07-08-video-overlay-design.md`, SPEC §33).
+      Phase 1 (engine + CLI burned-in export, GPMF auto-sync) shipped
+      2026-07-09; phases 2–3 (workspace links, Analyze panel + synced
+      playback) are queued at the top of the active section.
 
 ---
 

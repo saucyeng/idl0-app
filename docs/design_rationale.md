@@ -660,3 +660,40 @@ the store own delivery).
 bytes to the existing `pushFirmware` / pending-verify path (P9). The new surface
 is just fetch + compare + download; the device's `esp_ota_end` SHA-256 stays the
 authoritative integrity gate, with the app-side checksum a fast-fail.
+
+---
+
+## Video overlay: sidecar ffmpeg + one rasterizer (2026-07-09)
+
+**ffmpeg as a sidecar process, never linked.** The overlay export needs
+decode → composite → encode, and the obvious shapes were linking libav
+(`ffmpeg-next`) into the engine or shelling out to a separate `ffmpeg`
+binary. Linking loses on every axis that has hurt this project before:
+libav cross-compilation on Windows + cargokit, LGPL/GPL distribution
+questions for an AGPL app, and a per-platform build that breaks in new
+ways. The sidecar costs one external executable (system-installed or
+`--ffmpeg`-pointed in v1) and buys ffmpeg's hardware encoders with zero
+build entanglement. Process spawning violates engine purity, so the driver
+lives in a dedicated `idl-rs-video-export` crate consumed by both the CLI
+and the FRB bridge — written once, engine-agnostic (frames arrive through
+a closure).
+
+**One rasterizer for preview and export (WYSIWYG), one model for many
+canvases.** The headless-CLI requirement forces overlay rendering into
+Rust (tiny-skia + embedded IBM Plex Mono) — so the same rasterizer serves
+CLI export, app export, and the app's live preview: what you tune is
+pixel-identical to what you ship. The layout/sampling model
+(`overlay::{model,sample}`) is deliberately canvas-agnostic and lives
+beside — not under — `video`: a future chart-canvas overlay (the dormant
+`WorksheetBlock.placement: overlay`) reuses the same model sampled at the
+worksheet cursor but composits in Flutter, because interactive chart
+chrome needs hit-testing, DPI-native text, and resize-fluid layout that a
+texture stream can't give. Pixel parity between the tiny-skia and Flutter
+compositors is an explicit non-goal.
+
+**Hand-rolled ISO-BMFF walker over the `mp4` crate.** The `mp4` crate's
+typed `TrackType` rejects tracks whose handler is not video/audio/subtitle
+— which is exactly what a GoPro `gpmd` telemetry track is. The walker
+reads only what the feature needs (gpmd sample table, creation time,
+video dims/fps) with bounds-checked reads, consistent with "the engine
+owns binary parsing."
