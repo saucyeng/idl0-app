@@ -35,22 +35,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       get rust_arc_decrement_strong_count_SessionHandlePtr =>
           wire.rust_arc_decrement_strong_count_RustOpaque_SessionHandle;
 
-  CrossPlatformFinalizerArg
-      get rust_arc_decrement_strong_count_SessionHandlePtr => wire
-          .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle;
-
-  @protected
-  SessionHandle
-      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          dynamic raw);
-
   @protected
   SessionHandle dco_decode_RustOpaque_SessionHandle(dynamic raw);
-
-  @protected
-  SessionHandle
-      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          dynamic raw);
 
   @protected
   String dco_decode_String(dynamic raw);
@@ -380,18 +366,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   WelchResult dco_decode_welch_result(dynamic raw);
 
   @protected
-  SessionHandle
-      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          SseDeserializer deserializer);
-
-  @protected
   SessionHandle sse_decode_RustOpaque_SessionHandle(
       SseDeserializer deserializer);
-
-  @protected
-  SessionHandle
-      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          SseDeserializer deserializer);
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
@@ -744,18 +720,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   WelchResult sse_decode_welch_result(SseDeserializer deserializer);
 
   @protected
-  void
-      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          SessionHandle self, SseSerializer serializer);
-
-  @protected
   void sse_encode_RustOpaque_SessionHandle(
       SessionHandle self, SseSerializer serializer);
-
-  @protected
-  void
-      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          SessionHandle self, SseSerializer serializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -1149,18 +1115,6 @@ class RustLibWire implements BaseWire {
 
   void rust_arc_decrement_strong_count_RustOpaque_SessionHandle(int ptr) =>
       wasmModule.rust_arc_decrement_strong_count_RustOpaque_SessionHandle(ptr);
-
-  void rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          int ptr) =>
-      wasmModule
-          .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-              ptr);
-
-  void rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          int ptr) =>
-      wasmModule
-          .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-              ptr);
 }
 
 @JS('wasm_bindgen')
@@ -1174,12 +1128,4 @@ extension type RustLibWasmModule._(JSObject _) implements JSObject {
 
   external void rust_arc_decrement_strong_count_RustOpaque_SessionHandle(
       int ptr);
-
-  external void
-      rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          int ptr);
-
-  external void
-      rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          int ptr);
 }

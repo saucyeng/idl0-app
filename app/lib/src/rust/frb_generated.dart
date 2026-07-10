@@ -279,15 +279,6 @@ abstract class RustLibApi extends BaseApi {
 
   CrossPlatformFinalizerArg
       get rust_arc_decrement_strong_count_SessionHandlePtr;
-
-  RustArcIncrementStrongCountFnType
-      get rust_arc_increment_strong_count_SessionHandle;
-
-  RustArcDecrementStrongCountFnType
-      get rust_arc_decrement_strong_count_SessionHandle;
-
-  CrossPlatformFinalizerArg
-      get rust_arc_decrement_strong_count_SessionHandlePtr;
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -560,8 +551,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-            handle, serializer);
+        sse_encode_RustOpaque_SessionHandle(handle, serializer);
         sse_encode_String(videoPath, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 9, port: port_);
@@ -1482,32 +1472,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       get rust_arc_decrement_strong_count_SessionHandle =>
           wire.rust_arc_decrement_strong_count_RustOpaque_SessionHandle;
 
-  RustArcIncrementStrongCountFnType
-      get rust_arc_increment_strong_count_SessionHandle => wire
-          .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle;
-
-  RustArcDecrementStrongCountFnType
-      get rust_arc_decrement_strong_count_SessionHandle => wire
-          .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle;
-
-  @protected
-  SessionHandle
-      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return SessionHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
-  }
-
   @protected
   SessionHandle dco_decode_RustOpaque_SessionHandle(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return SessionHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
-  }
-
-  @protected
-  SessionHandle
-      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return SessionHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
@@ -2511,26 +2477,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  SessionHandle
-      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return SessionHandleImpl.frbInternalSseDecode(
-        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
-  }
-
-  @protected
   SessionHandle sse_decode_RustOpaque_SessionHandle(
       SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return SessionHandleImpl.frbInternalSseDecode(
-        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
-  }
-
-  @protected
-  SessionHandle
-      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return SessionHandleImpl.frbInternalSseDecode(
         sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
@@ -3701,28 +3649,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void
-      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          SessionHandle self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_usize(
-        (self as SessionHandleImpl).frbInternalSseEncode(move: false),
-        serializer);
-  }
-
-  @protected
   void sse_encode_RustOpaque_SessionHandle(
       SessionHandle self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_usize(
-        (self as SessionHandleImpl).frbInternalSseEncode(move: null),
-        serializer);
-  }
-
-  @protected
-  void
-      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
-          SessionHandle self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
         (self as SessionHandleImpl).frbInternalSseEncode(move: null),
@@ -4682,26 +4610,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_prim_f_64_strict(self.freqsHz, serializer);
     sse_encode_list_prim_f_64_strict(self.values, serializer);
   }
-}
-
-@sealed
-class SessionHandleImpl extends RustOpaque implements SessionHandle {
-  // Not to be used by end users
-  SessionHandleImpl.frbInternalDcoDecode(List<dynamic> wire)
-      : super.frbInternalDcoDecode(wire, _kStaticData);
-
-  // Not to be used by end users
-  SessionHandleImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
-      : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
-
-  static final _kStaticData = RustArcStaticData(
-    rustArcIncrementStrongCount:
-        RustLib.instance.api.rust_arc_increment_strong_count_SessionHandle,
-    rustArcDecrementStrongCount:
-        RustLib.instance.api.rust_arc_decrement_strong_count_SessionHandle,
-    rustArcDecrementStrongCountPtr:
-        RustLib.instance.api.rust_arc_decrement_strong_count_SessionHandlePtr,
-  );
 }
 
 @sealed
