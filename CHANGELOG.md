@@ -12,6 +12,20 @@ Log file schema versions and app versions are independent. Both are noted where 
 
 ### Added
 
+- **Video overlay phase 2 — app data layer (2026-07-10).** `.idl0w` v8:
+  `videos[]` link entries (path, size+mtime re-link identity, sync offset/
+  method/confidence). Workbook v2 Dart model: `overlay_layouts` mirroring
+  the engine schema byte-for-byte (engine-parity test fixture kept in
+  lockstep with `core/src/overlay/model.rs`). New bridge module
+  (`video_probe`, `estimate_video_sync`) + FRB codegen; linking a video
+  auto-syncs via GPMF UTC (else creation time), degrading to manual/offset-0
+  when the container has no anchor; a no-overlap video is refused, not
+  stored. Workspace mutators `linkVideo` / `unlinkVideo` / `setVideoSync`
+  (manual always stores null confidence) + `VideoLinker` provider; typed
+  `VideoLinkException` / `VideoSyncMismatchException`. **Spec disposition:**
+  spec-during — §11.4/§15.4/§17a.2/§33.3 updated with the code; subsystem
+  contract in §33. UI (picker, playback, nudge) is phase 3.
+
 - **Video overlay phase 1 — engine + CLI (2026-07-09).** Headless burned-in
   telemetry overlay export. Canvas-agnostic overlay system in the engine
   (`overlay::model` — gauge / attitude / trace-strip / track-map / lap-panel

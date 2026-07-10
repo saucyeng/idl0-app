@@ -8,17 +8,6 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
 
 ## Active / awaiting hardware verification
 
-- [ ] **Video overlay phase 2 — app data layer (2026-07-09)** — per the
-      design doc (`docs/superpowers/specs/2026-07-08-video-overlay-design.md`)
-      and SPEC §33: `.idl0w` v7→v8 `videos[]` link entries (path, size+mtime
-      re-link validation, `sync_offset_s`, `sync_method`, confidence, label),
-      Dart workbook v2 model for `overlay_layouts` (write side; engine reads
-      it already), GPMF auto-sync at link time via the bridge
-      (`read_gpmd_samples` + `parse_gpmf` + `estimate_sync` are engine-side).
-      Spec-during: SPEC §11.4/§15 (workspace v8) + §17a (workbook v2).
-      Android note: resolve `content://` picks to an fd/copy before engine
-      demux (design doc §7).
-
 - [ ] **Video overlay phase 3 — app UI (2026-07-09)** — Analyze video panel
       as a worksheet slot kind (media_kit), cursor↔playback sync through the
       §26.7 synchronized-cursor contract, live overlay preview via
@@ -27,7 +16,9 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
       progress stream + ffmpeg-path Setting. Spec-during: §26 (panel), §27
       (Setting). **Adoption gate:** media_kit version must ship 16 KB
       page-size-aligned Android libs. FRB codegen rerun required when the
-      bridge surface lands.
+      bridge surface lands. Android note (deferred from phase 2, binds to
+      the picker): resolve `content://` picks to an fd/copy before engine
+      demux (design doc §7).
 
 - [ ] **OTA hardware E2E against the first GitHub release (2026-07-06)** — after
       `v0.1.0` is cut: USB-flash once (rollback bootloader; temporary
@@ -148,6 +139,20 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
       whether the `accel_z`-off-on-IMU1/2 channel mask (`0x3BEFF`) is intentional.
 
 ## Completed
+- [x] **Video overlay phase 2 — app data layer (2026-07-10)** — `.idl0w` v8
+      `videos[]` link entries (VideoLink: path, size+mtime re-link identity,
+      sync offset/method/confidence, label); workbook v2 Dart
+      `overlay_layouts` model (engine-parity JSON, fixture in lockstep with
+      `core/src/overlay/model.rs`); bridge module `video.rs` (`video_probe`,
+      `estimate_video_sync` on the retained handle — a `&SessionHandle`
+      param duplicated FRB's opaque registration, fixed to
+      `RustOpaque<SessionHandle>` matching laps/math/tracks) + FRB codegen;
+      link flow: pure `buildVideoLink`, `VideoLinker` provider (Parse →
+      manual/offset-0 degradation, NoOverlap → `VideoSyncMismatchException`),
+      workspace mutators `linkVideo`/`unlinkVideo`/`setVideoSync`. 10 new
+      tests; `flutter test` 349/349 (data+providers), `cargo test` green.
+      Spec-during: §11.4/§15.4/§17a.2/§33.3. Engine work still unpushed to
+      `github.com/saucyeng/idl-rs` (needs a `git push` from either checkout).
 - [x] **OTA release enablement sprint — both repos (2026-07-06)** — the
       finishing work the repo split unblocked, executed as 8 file-disjoint
       parallel subagent tasks, each task-reviewed before commit:

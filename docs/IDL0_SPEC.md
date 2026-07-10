@@ -902,7 +902,7 @@ Riverpod only. No Provider, no Bloc, no setState except local widget state.
 | Raw log | `.idl0` | Never — immutable after download |
 | Workspace | `.idl0w` | Yes — all derived work |
 
-`.idl0w` is versioned JSON (current schema: v7). Contains: lap/sector gates, annotations, channel colors, track visits with their cached detected laps (§17.4). Math channels and workbook layout live on the owning Workbook (`.idl0wb`, §17a) — they are not stored in `.idl0w`.
+`.idl0w` is versioned JSON (current schema: v8). Contains: lap/sector gates, annotations, channel colors, track visits with their cached detected laps (§17.4), and video links (`videos[]`, v8 — §15.4). Math channels and workbook layout live on the owning Workbook (`.idl0wb`, §17a) — they are not stored in `.idl0w`.
 
 **Workspace lap gate list:** `lap_gates` is an ordered list. Only `lap_gates[0]` is used for timing; additional entries represent candidate positions the user has experimented with. An empty list means no gate has been placed yet.
 
@@ -1204,6 +1204,27 @@ session re-parses on demand.
 
 The `.idl0` file is the source of truth; the engine parses it and owns the parsed session. There is no separate process-global sample registry — the chart reads the handle the same way the math evaluator (§19) does.
 
+### 15.4 Video links (`videos[]`, workspace v8)
+
+A session workspace may reference any number of external video files (§33). Each entry in the `videos[]` array (added in workspace_version 8; older files load with an empty list):
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `id` | string | Stable UUID assigned app-side at link time |
+| `path` | string | Absolute path to the video; may live outside the session folder |
+| `file_size_bytes` | int | Size at link time — cheap re-link validation without hashing multi-GB files |
+| `file_mtime_ms` | int | Modification time at link time, UTC ms |
+| `sync_offset_s` | double | `session_time_s = video_time_s + sync_offset_s`, seconds |
+| `sync_method` | string | `gpmf` \| `creation_time` \| `manual` |
+| `sync_confidence` | double? | 0.9 gpmf / 0.3 creation_time; **null for manual** — omitted from JSON |
+| `label` | string? | Optional user-facing name, e.g. `Chest cam` — omitted when unset |
+
+Semantics:
+- **Linking auto-syncs.** At link time the app estimates `sync_offset_s` engine-side (§33.3): GPMF UTC anchor when the container carries one, else container creation time. A container with no usable anchor degrades to `manual` at offset 0 for the user to nudge. A video whose time range does not overlap the session is refused (surfaced as a mismatch), not stored.
+- **A manual sync is never silently overwritten** — re-estimation only happens on explicit user action, and a `manual` method always stores a null confidence.
+- **A missing/moved file prompts a re-link, never blocks workspace load.** `file_size_bytes` + `file_mtime_ms` verify a candidate file is the same recording.
+- The `.idl0` log remains untouched — video links are derived work and live only in `.idl0w`.
+
 ---
 
 ## 16. Track Entity
@@ -1402,7 +1423,7 @@ channels, axes, layout — independent of any specific session.
   column, ordered by `updated_at_ms` descending.
 - Conflict policy: last-write-wins by `updated_at_ms`.
 
-### 17a.2 Schema (workbook_version = 1)
+### 17a.2 Schema (workbook_version = 2)
 
 | Field             | Type     | Notes                                         |
 |-------------------|----------|-----------------------------------------------|
@@ -1411,15 +1432,23 @@ channels, axes, layout — independent of any specific session.
 | `worksheets`      | list     | Ordered list of worksheets (see §26).         |
 | `math_channels`   | list     | Derived channels (see §25).                   |
 | `constants`       | list     | Named numeric constants for expressions.      |
+| `overlay_layouts` | list     | Overlay layouts (§33.1). Added in v2; omitted when empty. |
 | `created_at_ms`   | int      | UTC ms since epoch.                           |
 | `updated_at_ms`   | int      | UTC ms since epoch; LWW key.                  |
-| `workbook_version`| int      | Schema version. Currently 1.                  |
+| `workbook_version`| int      | Schema version. Currently 2.                  |
 
 Each `math_channels` entry: `id` (string, stable; **optional** — defaults to
 `name` when omitted so hand-authored files stay name-only), `name`, `expression`,
 `quantity`, `units`, `sample_rate_hz` (number; `0` = inherit), `decimal_places`
 (int), `color` (hex string `#AARRGGBB`). Each `constants` entry: `id` (optional,
 defaults to `name`), `name`, `value` (number).
+
+Each `overlay_layouts` entry follows the engine-defined shape in §33.1 exactly
+(the engine consumes this JSON directly via `idl-rs overlay --workbook`):
+`id`, `name`, `canvas` (`"WxH"`), `elements[]` with a `type` discriminator
+(`gauge` | `attitude` | `trace_strip` | `track_map` | `lap_panel`) and `rect`
+as a normalized `[x, y, w, h]` array. Added in workbook_version 2 (additive) —
+v1 files load with an empty layout list.
 
 Newer-than-supported version throws `UnsupportedWorkbookVersionException`.
 Missing optional fields default; older versions load cleanly (a `.idl0wb` with no
@@ -3159,6 +3188,12 @@ estimate_sync` returns `SyncEstimate { offset_s, confidence, method }`:
 else `creation_time` (confidence 0.3). Manual offsets always win; rendering
 never re-estimates. Video/session overlap is validated — none → typed error
 listing both ranges. `session_time_s = video_time_s + sync_offset_s`.
+
+The app runs this estimation at link time through the bridge (`video_probe`,
+`estimate_video_sync` against the retained `SessionHandle`) and persists the
+outcome as a workspace `videos[]` entry (§15.4). A container with no usable
+anchor degrades to a `manual` link at offset 0; a no-overlap error is
+surfaced to the user and nothing is stored.
 
 ### 33.4 Rendering
 
