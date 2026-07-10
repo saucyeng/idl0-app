@@ -258,6 +258,52 @@ class SessionWorkspaceNotifier extends FamilyAsyncNotifier<Workspace, String> {
     await _persist(next);
   }
 
+  /// Appends [link] to [Workspace.videos] and saves (SPEC §33.3).
+  Future<void> linkVideo(VideoLink link) async {
+    final ws = state.requireValue;
+    await _persist(ws.copyWith(videos: [...ws.videos, link]));
+  }
+
+  /// Removes the video link with [videoId] and saves. No-op when absent.
+  Future<void> unlinkVideo(String videoId) async {
+    final ws = state.requireValue;
+    if (!ws.videos.any((v) => v.id == videoId)) return;
+    await _persist(
+      ws.copyWith(videos: ws.videos.where((v) => v.id != videoId).toList()),
+    );
+  }
+
+  /// Rewrites one link's sync fields (manual nudge or re-estimate) and
+  /// saves. No-op when [videoId] is absent. A `'manual'` [method] always
+  /// stores a null confidence — the user's word is not scored (SPEC §33.3).
+  ///
+  /// [offsetS] is in seconds (`session_time_s = video_time_s + offsetS`);
+  /// [method] is `'gpmf' | 'creation_time' | 'manual'`.
+  Future<void> setVideoSync(
+    String videoId, {
+    required double offsetS,
+    required String method,
+    double? confidence,
+  }) async {
+    final ws = state.requireValue;
+    if (!ws.videos.any((v) => v.id == videoId)) return;
+    await _persist(
+      ws.copyWith(
+        videos: [
+          for (final v in ws.videos)
+            if (v.id == videoId)
+              v.copyWith(
+                syncOffsetS: offsetS,
+                syncMethod: method,
+                syncConfidence: method == 'manual' ? null : confidence,
+              )
+            else
+              v,
+        ],
+      ),
+    );
+  }
+
   Future<void> _persist(Workspace next) async {
     state = AsyncData(next);
     final saver = _saver;

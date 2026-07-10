@@ -272,6 +272,21 @@ class WorkbookParseException extends ParseException {
   const WorkbookParseException(super.message);
 }
 
+/// A video file could not be linked to a session — missing, unreadable, or
+/// the container failed to open at all (SPEC §33.3).
+class VideoLinkException extends IdlException {
+  /// Creates a [VideoLinkException] with [message].
+  const VideoLinkException(super.message);
+}
+
+/// The video's time range does not overlap the session at all — almost
+/// certainly footage from a different ride. Surfaced to the user instead of
+/// storing a meaningless offset (SPEC §33.3).
+class VideoSyncMismatchException extends IdlException {
+  /// Creates a [VideoSyncMismatchException] with [message].
+  const VideoSyncMismatchException(super.message);
+}
+
 /// Thrown when the firmware refuses a Control-characteristic write by
 /// returning a non-zero ATT result code.
 ///
