@@ -445,13 +445,13 @@ void main() {
       expect(json.containsKey('starred_lap_number'), isFalse);
     });
 
-    test('Workspace.empty — uses supported version (v7)', () {
+    test('Workspace.empty — uses supported version (v8)', () {
       // Arrange / Act
       final ws = Workspace.empty('s');
 
-      // Assert — bumped to v7; TrackVisit now caches detected laps.
-      expect(ws.workspaceVersion, equals(7));
-      expect(Workspace.supportedVersion, equals(7));
+      // Assert — bumped to v8; workspaces now carry video links.
+      expect(ws.workspaceVersion, equals(8));
+      expect(Workspace.supportedVersion, equals(8));
     });
 
     test(
@@ -535,9 +535,9 @@ void main() {
       expect(ws.mathChannels.first.name, 'F');
     });
 
-    test('Workspace.supportedVersion equals 7', () {
+    test('Workspace.supportedVersion equals 8', () {
       // Arrange / Act / Assert — locks the bumped constant.
-      expect(Workspace.supportedVersion, 7);
+      expect(Workspace.supportedVersion, 8);
     });
   });
 
@@ -600,7 +600,7 @@ void main() {
       expect(visit.laps, isEmpty);
     });
 
-    test('Workspace round-trips visits carrying laps at version 7', () {
+    test('Workspace round-trips visits carrying laps at version 8', () {
       // Arrange
       final ws = Workspace.empty('sess-1').copyWith(
         trackVisits: [visitWithLaps()],
@@ -611,7 +611,7 @@ void main() {
       final restored = Workspace.fromJson(ws.toJson());
 
       // Assert
-      expect(restored.workspaceVersion, 7);
+      expect(restored.workspaceVersion, 8);
       expect(restored.trackVisits.single.laps.single.lapTimeMs, 4000);
     });
 
@@ -627,6 +627,88 @@ void main() {
 
       // Assert
       expect(cleared.trackVisits, isEmpty);
+    });
+
+  });
+
+  group('Workspace v8 — videos —', () {
+    Map<String, dynamic> v8Json() => {
+          'workspace_version': 8,
+          'session_id': 's-1',
+          'lap_gates': <dynamic>[],
+          'sector_gates': <dynamic>[],
+          'videos': [
+            {
+              'id': 'v-uuid-1',
+              'path': 'C:/rides/GX010001.mp4',
+              'file_size_bytes': 123456789,
+              'file_mtime_ms': 1751000000000,
+              'sync_offset_s': 12.34,
+              'sync_method': 'gpmf',
+              'sync_confidence': 0.9,
+              'label': 'Chest cam',
+            },
+            {
+              'id': 'v-uuid-2',
+              'path': 'C:/rides/GX020001.mp4',
+              'file_size_bytes': 1,
+              'file_mtime_ms': 2,
+              'sync_offset_s': 0.0,
+              'sync_method': 'manual',
+            },
+          ],
+        };
+
+    test('fromJson — v8 with two links — parses fields and null confidence',
+        () {
+      // Arrange
+      final json = v8Json();
+
+      // Act
+      final ws = Workspace.fromJson(json);
+
+      // Assert
+      expect(ws.videos, hasLength(2));
+      expect(ws.videos.first.path, 'C:/rides/GX010001.mp4');
+      expect(ws.videos.first.syncOffsetS, closeTo(12.34, 1e-9));
+      expect(ws.videos.first.syncMethod, 'gpmf');
+      expect(ws.videos.first.syncConfidence, closeTo(0.9, 1e-9));
+      expect(ws.videos.last.syncConfidence, isNull);
+      expect(ws.videos.last.label, isNull);
+    });
+
+    test('toJson/fromJson — round-trip — identical videos', () {
+      // Arrange
+      final ws = Workspace.fromJson(v8Json());
+
+      // Act
+      final back = Workspace.fromJson(ws.toJson());
+
+      // Assert
+      expect(back.videos, hasLength(2));
+      expect(back.toJson()['videos'], ws.toJson()['videos']);
+    });
+
+    test('fromJson — v7 file without videos — defaults to empty', () {
+      // Arrange
+      final json = v8Json()
+        ..['workspace_version'] = 7
+        ..remove('videos');
+
+      // Act
+      final ws = Workspace.fromJson(json);
+
+      // Assert
+      expect(ws.videos, isEmpty);
+    });
+
+    test('toJson — no videos — omits the key', () {
+      // Arrange
+      final ws = Workspace.empty('s-1');
+
+      // Act + Assert
+      expect(ws.toJson().containsKey('videos'), isFalse);
+      expect(ws.workspaceVersion, 8);
     });
   });
 }

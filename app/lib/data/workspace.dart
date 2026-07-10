@@ -38,7 +38,11 @@ import 'package:idl0/data/session_model.dart' show Lap;
 /// - v7: `TrackVisit` now carries a `laps` array caching the laps detected
 ///   within its window, so the Data tab builds aggregates without parsing the
 ///   `.idl0` (§17.4, §24.7). v1–v6 files load cleanly — `laps` defaults empty.
-const int _kSupportedWorkspaceVersion = 7;
+/// - v8: adds `videos` — video↔session links (SPEC §33.3): file identity
+///   (path + size/mtime for cheap re-link validation) and the sync offset
+///   (`session_time_s = video_time_s + sync_offset_s`). v1–v7 files load
+///   cleanly — `videos` defaults empty.
+const int _kSupportedWorkspaceVersion = 8;
 
 /// One contiguous time window during which the rider was on a single Track.
 ///
@@ -115,6 +119,104 @@ class TrackVisit {
         'end_timestamp_ms': endTimestampMs,
         if (laps.isNotEmpty) 'laps': laps.map((l) => l.toJson()).toList(),
       };
+}
+
+/// One video linked to this session (SPEC §33.3). [path] may live outside
+/// the session folder; [fileSizeBytes] + [fileMtimeMs] give cheap re-link
+/// validation without hashing multi-GB files. [syncOffsetS] is in seconds
+/// (`session_time_s = video_time_s + sync_offset_s`); [syncMethod] is
+/// `'gpmf' | 'creation_time' | 'manual'` (stored as a string, matching the
+/// engine's serde tags); [syncConfidence] is null for manual syncs.
+class VideoLink {
+  /// Stable UUID for this link, assigned app-side at link time.
+  final String id;
+
+  /// Absolute path to the video file. Not required to live inside the
+  /// session folder — a missing file prompts a re-link, never blocks load.
+  final String path;
+
+  /// File size in bytes at link time, for cheap re-link validation.
+  final int fileSizeBytes;
+
+  /// File modification time at link time, UTC milliseconds since epoch.
+  final int fileMtimeMs;
+
+  /// Sync offset in seconds: `session_time_s = video_time_s + syncOffsetS`.
+  final double syncOffsetS;
+
+  /// How [syncOffsetS] was determined: `'gpmf' | 'creation_time' | 'manual'`.
+  final String syncMethod;
+
+  /// Estimator confidence in [0, 1] — 0.9 for gpmf, 0.3 for creation_time.
+  /// `null` for manual syncs (the user's word is not scored).
+  final double? syncConfidence;
+
+  /// Optional user-facing name, e.g. `Chest cam`.
+  final String? label;
+
+  /// Creates a [VideoLink].
+  const VideoLink({
+    required this.id,
+    required this.path,
+    required this.fileSizeBytes,
+    required this.fileMtimeMs,
+    required this.syncOffsetS,
+    required this.syncMethod,
+    this.syncConfidence,
+    this.label,
+  });
+
+  /// Sentinel distinguishing "omitted" from "explicitly null" in [copyWith]
+  /// for [syncConfidence] — switching to a manual sync must be able to null
+  /// the confidence out.
+  static const Object _unset = Object();
+
+  /// Returns a copy with the given sync/label fields replaced. File-identity
+  /// fields ([id], [path], [fileSizeBytes], [fileMtimeMs]) are immutable —
+  /// a different file is a different link.
+  VideoLink copyWith({
+    double? syncOffsetS,
+    String? syncMethod,
+    Object? syncConfidence = _unset,
+    String? label,
+  }) =>
+      VideoLink(
+        id: id,
+        path: path,
+        fileSizeBytes: fileSizeBytes,
+        fileMtimeMs: fileMtimeMs,
+        syncOffsetS: syncOffsetS ?? this.syncOffsetS,
+        syncMethod: syncMethod ?? this.syncMethod,
+        syncConfidence: identical(syncConfidence, _unset)
+            ? this.syncConfidence
+            : syncConfidence as double?,
+        label: label ?? this.label,
+      );
+
+  /// Serializes to JSON. Nullable fields are omitted when null so
+  /// manual-sync links keep clean on-disk diffs.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'path': path,
+        'file_size_bytes': fileSizeBytes,
+        'file_mtime_ms': fileMtimeMs,
+        'sync_offset_s': syncOffsetS,
+        'sync_method': syncMethod,
+        if (syncConfidence != null) 'sync_confidence': syncConfidence,
+        if (label != null) 'label': label,
+      };
+
+  /// Deserializes from JSON. Missing `sync_confidence`/`label` default null.
+  factory VideoLink.fromJson(Map<String, dynamic> json) => VideoLink(
+        id: json['id'] as String,
+        path: json['path'] as String,
+        fileSizeBytes: json['file_size_bytes'] as int,
+        fileMtimeMs: json['file_mtime_ms'] as int,
+        syncOffsetS: (json['sync_offset_s'] as num).toDouble(),
+        syncMethod: json['sync_method'] as String,
+        syncConfidence: (json['sync_confidence'] as num?)?.toDouble(),
+        label: json['label'] as String?,
+      );
 }
 
 /// Layout of a single analysis component (chart, map, gauge, etc.) within a
@@ -307,6 +409,10 @@ class Workspace {
   /// Added in workspace_version 5.
   final int? starredLapNumber;
 
+  /// Videos linked to this session, in link order (SPEC §33.3). Empty until
+  /// the user links footage. Added in workspace_version 8.
+  final List<VideoLink> videos;
+
   /// Creates a [Workspace].
   const Workspace({
     required this.workspaceVersion,
@@ -322,6 +428,7 @@ class Workspace {
     this.mainLapNumber,
     this.overlayLapKey,
     this.starredLapNumber,
+    this.videos = const [],
   });
 
   /// Creates an empty workspace for a new session.
@@ -352,6 +459,7 @@ class Workspace {
     int? mainLapNumber,
     ({String sessionId, int lapNumber})? overlayLapKey,
     int? starredLapNumber,
+    List<VideoLink>? videos,
   }) =>
       Workspace(
         workspaceVersion: workspaceVersion,
@@ -368,6 +476,7 @@ class Workspace {
         mainLapNumber: mainLapNumber ?? this.mainLapNumber,
         overlayLapKey: overlayLapKey ?? this.overlayLapKey,
         starredLapNumber: starredLapNumber ?? this.starredLapNumber,
+        videos: videos ?? this.videos,
       );
 
   /// Returns a copy with [referenceLapNumber] set to `null`.
@@ -384,6 +493,7 @@ class Workspace {
         ignoredLapNumbers: ignoredLapNumbers,
         trackVisits: trackVisits,
         trackVisitsLibraryHash: trackVisitsLibraryHash,
+        videos: videos,
       );
 
   /// Returns a copy with [trackVisits] empty and [trackVisitsLibraryHash]
@@ -402,6 +512,7 @@ class Workspace {
         mainLapNumber: mainLapNumber,
         overlayLapKey: overlayLapKey,
         starredLapNumber: starredLapNumber,
+        videos: videos,
       );
 
   /// Returns a copy with [mainLapNumber] set to `null`. Distinct from
@@ -420,6 +531,7 @@ class Workspace {
         trackVisitsLibraryHash: trackVisitsLibraryHash,
         overlayLapKey: overlayLapKey,
         starredLapNumber: starredLapNumber,
+        videos: videos,
       );
 
   /// Returns a copy with [overlayLapKey] set to `null`. Distinct from
@@ -437,6 +549,7 @@ class Workspace {
         trackVisitsLibraryHash: trackVisitsLibraryHash,
         mainLapNumber: mainLapNumber,
         starredLapNumber: starredLapNumber,
+        videos: videos,
       );
 
   /// Returns a copy with [starredLapNumber] set to `null` — restores the
@@ -454,6 +567,7 @@ class Workspace {
         trackVisitsLibraryHash: trackVisitsLibraryHash,
         mainLapNumber: mainLapNumber,
         overlayLapKey: overlayLapKey,
+        videos: videos,
       );
 
   /// Serializes to a JSON-encodable map.
@@ -483,6 +597,8 @@ class Workspace {
           'lap_number': overlayLapKey!.lapNumber,
         },
       if (starredLapNumber != null) 'starred_lap_number': starredLapNumber,
+      if (videos.isNotEmpty)
+        'videos': videos.map((v) => v.toJson()).toList(),
     };
   }
 
@@ -528,6 +644,9 @@ class Workspace {
       mainLapNumber: json['main_lap_number'] as int?,
       overlayLapKey: _parseOverlayLapKey(json['overlay_lap_key']),
       starredLapNumber: json['starred_lap_number'] as int?,
+      videos: (json['videos'] as List<dynamic>? ?? [])
+          .map((v) => VideoLink.fromJson(v as Map<String, dynamic>))
+          .toList(),
     );
   }
 
