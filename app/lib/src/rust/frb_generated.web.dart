@@ -21,6 +21,7 @@ import 'session.dart';
 import 'spectrogram.dart';
 import 'table.dart';
 import 'tracks.dart';
+import 'video.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({
@@ -34,8 +35,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       get rust_arc_decrement_strong_count_SessionHandlePtr =>
           wire.rust_arc_decrement_strong_count_RustOpaque_SessionHandle;
 
+  CrossPlatformFinalizerArg
+      get rust_arc_decrement_strong_count_SessionHandlePtr => wire
+          .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle;
+
+  @protected
+  SessionHandle
+      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+          dynamic raw);
+
   @protected
   SessionHandle dco_decode_RustOpaque_SessionHandle(dynamic raw);
+
+  @protected
+  SessionHandle
+      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+          dynamic raw);
 
   @protected
   String dco_decode_String(dynamic raw);
@@ -344,14 +359,39 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt dco_decode_usize(dynamic raw);
 
   @protected
+  VideoFailure dco_decode_video_failure(dynamic raw);
+
+  @protected
+  VideoFailureKind dco_decode_video_failure_kind(dynamic raw);
+
+  @protected
+  VideoInfo dco_decode_video_info(dynamic raw);
+
+  @protected
+  VideoSyncMethod dco_decode_video_sync_method(dynamic raw);
+
+  @protected
+  VideoSyncOutcome dco_decode_video_sync_outcome(dynamic raw);
+
+  @protected
   VisitWindow dco_decode_visit_window(dynamic raw);
 
   @protected
   WelchResult dco_decode_welch_result(dynamic raw);
 
   @protected
+  SessionHandle
+      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+          SseDeserializer deserializer);
+
+  @protected
   SessionHandle sse_decode_RustOpaque_SessionHandle(
       SseDeserializer deserializer);
+
+  @protected
+  SessionHandle
+      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+          SseDeserializer deserializer);
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
@@ -683,14 +723,39 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt sse_decode_usize(SseDeserializer deserializer);
 
   @protected
+  VideoFailure sse_decode_video_failure(SseDeserializer deserializer);
+
+  @protected
+  VideoFailureKind sse_decode_video_failure_kind(SseDeserializer deserializer);
+
+  @protected
+  VideoInfo sse_decode_video_info(SseDeserializer deserializer);
+
+  @protected
+  VideoSyncMethod sse_decode_video_sync_method(SseDeserializer deserializer);
+
+  @protected
+  VideoSyncOutcome sse_decode_video_sync_outcome(SseDeserializer deserializer);
+
+  @protected
   VisitWindow sse_decode_visit_window(SseDeserializer deserializer);
 
   @protected
   WelchResult sse_decode_welch_result(SseDeserializer deserializer);
 
   @protected
+  void
+      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+          SessionHandle self, SseSerializer serializer);
+
+  @protected
   void sse_encode_RustOpaque_SessionHandle(
       SessionHandle self, SseSerializer serializer);
+
+  @protected
+  void
+      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+          SessionHandle self, SseSerializer serializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -1050,6 +1115,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_usize(BigInt self, SseSerializer serializer);
 
   @protected
+  void sse_encode_video_failure(VideoFailure self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_video_failure_kind(
+      VideoFailureKind self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_video_info(VideoInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_video_sync_method(
+      VideoSyncMethod self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_video_sync_outcome(
+      VideoSyncOutcome self, SseSerializer serializer);
+
+  @protected
   void sse_encode_visit_window(VisitWindow self, SseSerializer serializer);
 
   @protected
@@ -1066,6 +1149,18 @@ class RustLibWire implements BaseWire {
 
   void rust_arc_decrement_strong_count_RustOpaque_SessionHandle(int ptr) =>
       wasmModule.rust_arc_decrement_strong_count_RustOpaque_SessionHandle(ptr);
+
+  void rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+          int ptr) =>
+      wasmModule
+          .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+              ptr);
+
+  void rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+          int ptr) =>
+      wasmModule
+          .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+              ptr);
 }
 
 @JS('wasm_bindgen')
@@ -1079,4 +1174,12 @@ extension type RustLibWasmModule._(JSObject _) implements JSObject {
 
   external void rust_arc_decrement_strong_count_RustOpaque_SessionHandle(
       int ptr);
+
+  external void
+      rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+          int ptr);
+
+  external void
+      rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSessionHandle(
+          int ptr);
 }
