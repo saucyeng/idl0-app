@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:idl0/data/exceptions.dart';
+import 'package:idl0/data/overlay_layout.dart';
 import 'package:idl0/data/workbook.dart';
 import 'package:idl0/providers/workspace_provider.dart';
 
@@ -15,7 +16,7 @@ void main() {
       expect(wb.mathChannels, isEmpty);
       expect(wb.createdAtMs, now.millisecondsSinceEpoch);
       expect(wb.updatedAtMs, now.millisecondsSinceEpoch);
-      expect(wb.workbookVersion, 1);
+      expect(wb.workbookVersion, 2);
     });
 
     test('toJson → fromJson — round-trips all fields', () {
@@ -102,6 +103,47 @@ void main() {
       final still = wb.copyWith();
 
       expect(still.updatedAtMs, 2000);
+    });
+
+    group('Workbook v2 — overlay layouts —', () {
+      test('fromJson — v1 json without overlay_layouts — defaults to empty',
+          () {
+        // Arrange
+        final wb = Workbook.create(name: 'wb');
+        final json = wb.toJson()
+          ..['workbook_version'] = 1
+          ..remove('overlay_layouts');
+
+        // Act
+        final back = Workbook.fromJson(json);
+
+        // Assert
+        expect(back.overlayLayouts, isEmpty);
+      });
+
+      test('toJson/fromJson — with a layout — round-trips and version is 2',
+          () {
+        // Arrange
+        const layout = OverlayLayout(
+          id: 'L1',
+          name: 'A',
+          canvas: '1920x1080',
+          elements: [TrackMapElement(rect: [0.8, 0.0, 0.2, 0.3])],
+        );
+        final wb =
+            Workbook.create(name: 'wb').copyWith(overlayLayouts: [layout]);
+
+        // Act
+        final back = Workbook.fromJson(wb.toJson());
+
+        // Assert
+        expect(back.workbookVersion, 2);
+        expect(back.overlayLayouts.single.name, 'A');
+        expect(
+          back.overlayLayouts.single.elements.single,
+          isA<TrackMapElement>(),
+        );
+      });
     });
   });
 }

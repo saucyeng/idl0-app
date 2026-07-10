@@ -2,10 +2,14 @@ import 'package:uuid/uuid.dart';
 
 import 'exceptions.dart';
 import 'math_channel.dart' show MathChannel, MathConstant, kBuiltinMathChannels;
+import 'overlay_layout.dart' show OverlayLayout;
 import 'worksheet.dart' show Worksheet;
 
 /// Highest workbook_version this build can read.
-const int _kSupportedWorkbookVersion = 1;
+///
+/// - v2: adds `overlay_layouts` (SPEC §33.1); additive — v1 files load with
+///   an empty list.
+const int _kSupportedWorkbookVersion = 2;
 
 /// A portable analysis workbook — worksheets, charts, math channels, axes,
 /// layout — independent of any specific session.
@@ -40,6 +44,11 @@ class Workbook {
   /// Travels with the `.idl0wb` so a shared workbook brings its constants too.
   final List<MathConstant> constants;
 
+  /// Video/chart overlay layouts owned by this workbook (SPEC §33.1). The
+  /// engine consumes their JSON directly (`idl-rs overlay --workbook`).
+  /// Added in workbook_version 2.
+  final List<OverlayLayout> overlayLayouts;
+
   /// Creation timestamp, UTC milliseconds since Unix epoch.
   final int createdAtMs;
 
@@ -60,6 +69,7 @@ class Workbook {
     required this.updatedAtMs,
     required this.workbookVersion,
     this.constants = const [],
+    this.overlayLayouts = const [],
   });
 
   /// Creates a fresh [Workbook] with a generated UUID and matched timestamps.
@@ -72,6 +82,7 @@ class Workbook {
     List<Worksheet> worksheets = const [],
     List<MathChannel> mathChannels = const [],
     List<MathConstant> constants = const [],
+    List<OverlayLayout> overlayLayouts = const [],
     DateTime? now,
     String? workbookId,
   }) {
@@ -82,6 +93,7 @@ class Workbook {
       worksheets: worksheets,
       mathChannels: mathChannels,
       constants: constants,
+      overlayLayouts: overlayLayouts,
       createdAtMs: ts,
       updatedAtMs: ts,
       workbookVersion: _kSupportedWorkbookVersion,
@@ -135,13 +147,15 @@ class Workbook {
     List<Worksheet>? worksheets,
     List<MathChannel>? mathChannels,
     List<MathConstant>? constants,
+    List<OverlayLayout>? overlayLayouts,
     int? updatedAtMs,
     DateTime? now,
   }) {
     final mutated = name != null ||
         worksheets != null ||
         mathChannels != null ||
-        constants != null;
+        constants != null ||
+        overlayLayouts != null;
     final newUpdated = updatedAtMs ??
         (mutated
             ? (now ?? DateTime.now().toUtc()).millisecondsSinceEpoch
@@ -152,6 +166,7 @@ class Workbook {
       worksheets: worksheets ?? this.worksheets,
       mathChannels: mathChannels ?? this.mathChannels,
       constants: constants ?? this.constants,
+      overlayLayouts: overlayLayouts ?? this.overlayLayouts,
       createdAtMs: createdAtMs,
       updatedAtMs: newUpdated,
       workbookVersion: workbookVersion,
@@ -165,6 +180,8 @@ class Workbook {
         'worksheets': worksheets.map((w) => w.toJson()).toList(),
         'math_channels': mathChannels.map((c) => c.toJson()).toList(),
         'constants': constants.map((c) => c.toJson()).toList(),
+        if (overlayLayouts.isNotEmpty)
+          'overlay_layouts': overlayLayouts.map((l) => l.toJson()).toList(),
         'created_at_ms': createdAtMs,
         'updated_at_ms': updatedAtMs,
         'workbook_version': workbookVersion,
@@ -193,6 +210,9 @@ class Workbook {
             .toList(),
         constants: (json['constants'] as List<dynamic>? ?? [])
             .map((c) => MathConstant.fromJson(c as Map<String, dynamic>))
+            .toList(),
+        overlayLayouts: (json['overlay_layouts'] as List<dynamic>? ?? [])
+            .map((l) => OverlayLayout.fromJson(l as Map<String, dynamic>))
             .toList(),
         createdAtMs: json['created_at_ms'] as int,
         updatedAtMs: json['updated_at_ms'] as int,
