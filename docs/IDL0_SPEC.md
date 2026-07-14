@@ -46,7 +46,7 @@
 | 29 | Data Export | Export tasks |
 | 30 | First Launch / Onboarding | First launch |
 | **PART 8 — DISTRIBUTION** | | |
-| 31 | Distribution | Build/release |
+| 31 | Distribution | Build / release / self-update |
 | 32 | Open Source | Setup |
 | **PART 9 — VIDEO** | | |
 | 33 | Video Overlay (engine + CLI) | Video overlay tasks |
@@ -3126,11 +3126,73 @@ or Drive → faceted search → select sessions / laps → Analyze.
 |----------|--------|-------|
 | Android | APK / AAB | Primary target |
 | iOS | PWA (Flutter web) | Analysis-only, no BLE |
-| Windows | MSIX / EXE | No store required |
+| Windows | MSIX / EXE / zip | No store required |
 | macOS | DMG | Requires Apple notarization (automated in CI) |
-| Linux | AppImage | Optional |
+| Linux | AppImage | Single self-contained file; the self-update format (§31.2) |
 
-Build: `flutter build apk|web|windows|macos`
+Build: `flutter build apk|web|windows|macos|linux`
+
+### 31.1 App release pipeline
+
+The app is released from `idl0-app` the same way firmware is released from
+`idl0-firmware` (§27.7): **the git tag is the version of record.** On a `v*`
+tag, `app-release.yml` builds the app per platform, stamps the build version
+from the tag (`--build-name`, leading `v` stripped, so `package_info_plus`
+reports the tag at runtime), and publishes to GitHub Releases:
+
+| Platform | Artifact | Notes |
+|----------|----------|-------|
+| Android | `idl0-app-v<ver>.apk` + `.sha256` | release-signed (§31.1.1) |
+| Linux | `idl0-app-v<ver>-x86_64.AppImage` + `.sha256` | self-contained single file |
+| Windows | `idl0-app-v<ver>-windows-x64.zip` + `.sha256` | published; install path scaffolded (§31.2) |
+
+Exactly one asset per platform per release, versioned filenames — the asset
+contract the firmware workflow already enforces. Stable vs beta map onto the
+GitHub prerelease flag (`-beta`/`-rc` tag suffix → prerelease), identical to
+firmware channels. **App and firmware versions are independent.**
+
+#### 31.1.1 Android signing
+
+The update APK must be signed with the **same key** as the installed app or
+Android rejects it. A release keystore (kept out of git) is provided to CI via
+GitHub Actions secrets (base64 keystore + store/key passwords + alias); the
+release signing config in `android/app/build.gradle` reads them from a
+gitignored `key.properties`. Debug builds keep the debug key. (AppImage GPG
+signing is optional and deferred; the `sha256` sidecar is the Linux integrity
+check.)
+
+### 31.2 In-app self-update
+
+The app checks GitHub Releases for a newer **app** version and, where the
+platform allows, installs it — reusing the firmware update surface (§27.7):
+
+- **Check.** `AppReleaseCatalog` queries this repo's Releases API for the
+  selected channel's latest release and picks the current platform's asset
+  (`.apk` / `.AppImage` / `.zip`). `appUpdateProvider` compares the running
+  version (`package_info_plus`) to it and offers an update only when hosted is
+  strictly newer — the §27.7 rule, including the "ahead of channel →
+  informational, never a downgrade" case. The verdict is re-derived from live
+  inputs (never stale).
+- **UI.** A **Settings → App updates** section (sibling of Firmware): the
+  update-available card, a stable/beta channel picker (independent of the
+  firmware channel), an auto-check-on-launch toggle, and "Check now".
+- **Install.**
+  - **Android** — the downloaded APK is `sha256`-checked, then handed to the OS
+    package installer via a `FileProvider` + install intent; the OS performs the
+    replace and enforces the signature match. `REQUEST_INSTALL_PACKAGES` is
+    requested; if "install unknown apps" is off the user is routed to enable it
+    once.
+  - **Linux** — the new AppImage is downloaded beside the current one,
+    `sha256`-verified, made executable, atomically swapped into place (the
+    running process holds the old inode), and the user is prompted to relaunch.
+  - **Windows** — check + download only; the in-place swap/restart is
+    scaffolded ("downloaded — install manually for now") and completed later.
+
+Integrity gate per platform: Android — OS signature match; Linux — published
+`sha256`; Windows — deferred with the install path. Updates are always
+**user-initiated**; there is no forced update.
+
+Design doc: `docs/superpowers/specs/2026-07-14-app-self-update-design.md`.
 
 ---
 
