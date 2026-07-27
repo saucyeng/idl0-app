@@ -2,6 +2,12 @@
 cmake_minimum_required(VERSION 3.14)
 project(idl0 LANGUAGES CXX)
 
+# permission_handler_windows still includes <experimental/coroutine>, which
+# newer MSVC rejects as hard error STL1011. Silence it project-wide — this
+# applies to the app plus every plugin subdirectory added below — until the
+# plugin migrates to the C++20 <coroutine> header.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "idl0")

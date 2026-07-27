@@ -100,8 +100,12 @@ jobs:
           chmod +x "$APPDIR/AppRun"
           wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
           chmod +x appimagetool
+          # Embed the statically-linked type2 runtime so the AppImage self-mounts
+          # WITHOUT the host needing libfuse2 (which Ubuntu 22.04+ no longer ships).
+          # Without this, a fresh-Ubuntu double-click just silently fails.
+          wget -q "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64" -O runtime-x86_64
           mkdir -p dist
-          ARCH=x86_64 ./appimagetool --appimage-extract-and-run "$APPDIR" "dist/idl0-app-v${VERSION}-x86_64.AppImage"
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run --runtime-file runtime-x86_64 "$APPDIR" "dist/idl0-app-v${VERSION}-x86_64.AppImage"
           ( cd dist && sha256sum "idl0-app-v${VERSION}-x86_64.AppImage" > "idl0-app-v${VERSION}-x86_64.AppImage.sha256" )
 
       - name: Publish GitHub Release
@@ -132,13 +136,10 @@ jobs:
 
       - name: Build Windows
         working-directory: app
-        env:
-          # permission_handler_windows still includes <experimental/coroutine>,
-          # which the runner's newer MSVC rejects as a hard error (STL1011).
-          # cl.exe reads the CL env var for extra flags on every compile, so
-          # define the documented silence macro until the plugin moves to the
-          # C++20 <coroutine> header. Harmless to the Rust/cargokit build.
-          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+        # The MSVC experimental-coroutine error (STL1011) from
+        # permission_handler_windows is silenced project-wide in
+        # windows/CMakeLists.txt (a global CL env var breaks CMake compiler
+        # detection, so it must NOT be set here).
         run: flutter build windows --release --build-name="$VERSION"
 
       - name: Package zip
