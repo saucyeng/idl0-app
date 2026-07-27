@@ -3154,12 +3154,14 @@ firmware channels. **App and firmware versions are independent.**
 #### 31.1.1 Android signing
 
 The update APK must be signed with the **same key** as the installed app or
-Android rejects it. A release keystore (kept out of git) is provided to CI via
-GitHub Actions secrets (base64 keystore + store/key passwords + alias); the
-release signing config in `android/app/build.gradle` reads them from a
-gitignored `key.properties`. Debug builds keep the debug key. (AppImage GPG
-signing is optional and deferred; the `sha256` sidecar is the Linux integrity
-check.)
+Android rejects it. The app already signs **both debug and release** with one
+shared cert (`idl0`, keystore `~/.android/idl0-dev.jks`, configured in
+`android/app/build.gradle.kts`), so every build — local or CI — installs over
+the last with no uninstall, which is exactly what self-update needs. The
+keystore is **not** committed; CI restores it from the `ANDROID_KEYSTORE_B64`
+secret (base64 of the keystore) to that path. Its passwords live in the
+committed signing config. (AppImage GPG signing is optional and deferred; the
+`sha256` sidecar is the Linux integrity check.)
 
 ### 31.2 In-app self-update
 

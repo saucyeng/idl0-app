@@ -1,0 +1,65 @@
+# App release pipeline — see docs/IDL0_SPEC.md §31.1.
+#
+# On a `v*` tag, builds the signed release APK and publishes it to GitHub
+# Releases so it can be downloaded and installed (and later self-updated, §31.2).
+#
+# The git tag is the version of record: the leading `v` is stripped and passed
+# as `--build-name`, so `package_info_plus` at runtime equals the release tag.
+# A `-beta`/`-rc` suffix publishes as a GitHub prerelease. Exactly one `.apk`
+# plus its `.sha256` sidecar (sha256sum format) per release.
+#
+# Signing: the APK is signed with the repo's existing `idl0` cert so it installs
+# over any prior build with no uninstall. The keystore is NOT committed — CI
+# restores it from the `ANDROID_KEYSTORE_B64` secret (base64 of
+# ~/.android/idl0-dev.jks). Its passwords live in android/app/build.gradle.kts.
+#
+# First-run shakedown: `flutter build apk` cross-compiles the idl-rs engine for
+# Android via cargokit (Rust toolchain + Android NDK). ubuntu-latest ships both;
+# if the NDK version gradle wants is absent it is fetched automatically. The
+# build command itself is verified — it is what produces local release APKs.
+name: app-release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the GitHub Release + upload assets
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Restore signing keystore
+        run: |
+          mkdir -p "$HOME/.android"
+          echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > "$HOME/.android/idl0-dev.jks"
+
+      - name: Build release APK (arm64)
+        working-directory: app
+        run: flutter build apk --release --target-platform android-arm64 --build-name="$VERSION"
+
+      - name: Stage release assets
+        run: |
+          mkdir dist
+          cp app/build/app/outputs/flutter-apk/app-release.apk "dist/idl0-app-v${VERSION}.apk"
+          cd dist
+          sha256sum "idl0-app-v${VERSION}.apk" > "idl0-app-v${VERSION}.apk.sha256"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
