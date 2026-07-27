@@ -1,22 +1,15 @@
 # App release pipeline — see docs/IDL0_SPEC.md §31.1.
 #
-# On a `v*` tag, builds the signed release APK and publishes it to GitHub
-# Releases so it can be downloaded and installed (and later self-updated, §31.2).
+# On a `v*` tag, three platform jobs build in parallel and each uploads its
+# artifact; a final `release` job collects them all and publishes ONE GitHub
+# Release. Splitting build from publish avoids the concurrent-upload race
+# (parallel jobs writing to the same release dropped an asset as "other side
+# closed"). The git tag is the version of record (leading `v` stripped ->
+# --build-name); a `-beta`/`-rc` suffix publishes as a prerelease.
 #
-# The git tag is the version of record: the leading `v` is stripped and passed
-# as `--build-name`, so `package_info_plus` at runtime equals the release tag.
-# A `-beta`/`-rc` suffix publishes as a GitHub prerelease. Exactly one `.apk`
-# plus its `.sha256` sidecar (sha256sum format) per release.
-#
-# Signing: the APK is signed with the repo's existing `idl0` cert so it installs
-# over any prior build with no uninstall. The keystore is NOT committed — CI
-# restores it from the `ANDROID_KEYSTORE_B64` secret (base64 of
-# ~/.android/idl0-dev.jks). Its passwords live in android/app/build.gradle.kts.
-#
-# First-run shakedown: `flutter build apk` cross-compiles the idl-rs engine for
-# Android via cargokit (Rust toolchain + Android NDK). ubuntu-latest ships both;
-# if the NDK version gradle wants is absent it is fetched automatically. The
-# build command itself is verified — it is what produces local release APKs.
+# Signing (Android only): the APK is signed with the repo's existing `idl0`
+# cert so it installs over any prior build. The keystore is restored from the
+# ANDROID_KEYSTORE_B64 secret; its passwords live in build.gradle.kts.
 name: app-release
 
 on:
@@ -24,7 +17,7 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write # create the GitHub Release + upload assets
+  contents: write # the release job creates the GitHub Release
 
 jobs:
   android:
@@ -33,60 +26,49 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-
       - name: Version from tag
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-
       - name: Restore signing keystore
         run: |
           mkdir -p "$HOME/.android"
           echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > "$HOME/.android/idl0-dev.jks"
-
       - name: Build release APK (arm64)
         working-directory: app
-        run: flutter build apk --release --target-platform android-arm64 --build-name="$VERSION"
-
-      - name: Stage release assets
+        # --build-number is the Android versionCode: it must increase every
+        # release so a new APK installs as an in-place update rather than
+        # "already installed". github.run_number is monotonic per workflow.
+        run: flutter build apk --release --target-platform android-arm64 --build-name="$VERSION" --build-number=${{ github.run_number }}
+      - name: Stage assets
         run: |
-          mkdir dist
+          set -euo pipefail
+          mkdir -p dist
           cp app/build/app/outputs/flutter-apk/app-release.apk "dist/idl0-app-v${VERSION}.apk"
-          cd dist
-          sha256sum "idl0-app-v${VERSION}.apk" > "idl0-app-v${VERSION}.apk.sha256"
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+          ( cd dist && sha256sum "idl0-app-v${VERSION}.apk" > "idl0-app-v${VERSION}.apk.sha256" )
+      - uses: actions/upload-artifact@v4
         with:
-          files: dist/*
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          fail_on_unmatched_files: true
+          name: android
+          path: dist/*
+          if-no-files-found: error
 
-  # Linux: a single self-contained AppImage (download, chmod +x, double-click).
-  # No signing; integrity via the published .sha256 (§31.1/§31.2).
   linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-
       - name: Linux build deps
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libfuse2
-
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
       - name: Version from tag
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-
       - name: Build Linux
         working-directory: app
         run: flutter build linux --release --build-name="$VERSION"
-
       - name: Package AppImage
         run: |
           set -euo pipefail
@@ -100,23 +82,18 @@ jobs:
           chmod +x "$APPDIR/AppRun"
           wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
           chmod +x appimagetool
-          # Embed the statically-linked type2 runtime so the AppImage self-mounts
-          # WITHOUT the host needing libfuse2 (which Ubuntu 22.04+ no longer ships).
-          # Without this, a fresh-Ubuntu double-click just silently fails.
+          # Static type2 runtime -> the AppImage self-mounts without host libfuse2
+          # (Ubuntu 22.04+ dropped it), so a fresh-Ubuntu double-click just works.
           wget -q "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64" -O runtime-x86_64
           mkdir -p dist
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run --runtime-file runtime-x86_64 "$APPDIR" "dist/idl0-app-v${VERSION}-x86_64.AppImage"
           ( cd dist && sha256sum "idl0-app-v${VERSION}-x86_64.AppImage" > "idl0-app-v${VERSION}-x86_64.AppImage.sha256" )
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          files: dist/*
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          fail_on_unmatched_files: true
+          name: linux
+          path: dist/*
+          if-no-files-found: error
 
-  # Windows: a zip of the release bundle (unzip, run idl0.exe). No signing —
-  # SmartScreen may warn on first run; Authenticode can be added later.
   windows:
     runs-on: windows-latest
     defaults:
@@ -126,32 +103,62 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-
       - name: Version from tag
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-
       - name: Build Windows
         working-directory: app
-        # The MSVC experimental-coroutine error (STL1011) from
-        # permission_handler_windows is silenced project-wide in
-        # windows/CMakeLists.txt (a global CL env var breaks CMake compiler
-        # detection, so it must NOT be set here).
+        # The MSVC experimental-coroutine error (STL1011, permission_handler) is
+        # silenced project-wide in windows/CMakeLists.txt — a global CL env var
+        # breaks CMake compiler detection, so it must NOT be set here.
         run: flutter build windows --release --build-name="$VERSION"
-
       - name: Package zip
         run: |
           set -euo pipefail
           mkdir -p dist
           ( cd app/build/windows/x64/runner/Release && 7z a "$GITHUB_WORKSPACE/dist/idl0-app-v${VERSION}-windows-x64.zip" . >/dev/null )
           ( cd dist && sha256sum "idl0-app-v${VERSION}-windows-x64.zip" > "idl0-app-v${VERSION}-windows-x64.zip.sha256" )
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+          if-no-files-found: error
 
+  release:
+    needs: [android, linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Compose release notes
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          {
+            echo "## Downloads"
+            echo ""
+            echo "| Platform | File |"
+            echo "|---|---|"
+            echo "| 📱 Android | [idl0-app-v${VERSION}.apk](${BASE}/idl0-app-v${VERSION}.apk) |"
+            echo "| 🐧 Linux | [idl0-app-v${VERSION}-x86_64.AppImage](${BASE}/idl0-app-v${VERSION}-x86_64.AppImage) |"
+            echo "| 🪟 Windows | [idl0-app-v${VERSION}-windows-x64.zip](${BASE}/idl0-app-v${VERSION}-windows-x64.zip) |"
+            echo ""
+            echo "**Android** — tap the APK to install (updates over any prior build)."
+            echo "**Linux** — make it executable (chmod +x or Properties → Allow executing), then double-click. No libfuse2 needed."
+            echo "**Windows** — unzip anywhere and run idl0.exe."
+            echo ""
+            echo "SHA-256 checksums are attached below."
+          } > NOTES.md
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          body_path: NOTES.md
           prerelease: ${{ contains(github.ref_name, '-') }}
           fail_on_unmatched_files: true
