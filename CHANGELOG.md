@@ -12,6 +12,20 @@ Log file schema versions and app versions are independent. Both are noted where 
 
 ### Added
 
+- **Video overlay: `--rotate` and `--hwaccel` (2026-07-11).** `idl-rs overlay`
+  gained `--rotate <0|90|180|270>` — an extra counter-clockwise rotation
+  composed on top of container rotation metadata, for footage shot with the
+  camera deliberately mounted rotated (GoPro writes no rotation metadata for
+  a rotated *mount*). It becomes a `transpose`/`hflip,vflip` stage ahead of
+  the overlay, so the overlay composites onto the rotated frame and its text
+  stays upright; the render canvas follows the final display size. Non-quarter
+  turns are rejected at parse time. Also `--hwaccel <cuda|qsv|d3d11va|…>`,
+  selecting an ffmpeg hardware decoder for the source input (frames download
+  to system memory, so the overlay/rotation filter path stays portable);
+  pair with `--encoder h264_nvenc` to move both ends off the CPU. Both are
+  opt-in — the default argv is unchanged. **Spec disposition:** spec-during —
+  §33.5/§33.6.
+
 - **Video overlay phase 2 — app data layer (2026-07-10).** `.idl0w` v8:
   `videos[]` link entries (path, size+mtime re-link identity, sync offset/
   method/confidence). Workbook v2 Dart model: `overlay_layouts` mirroring
@@ -45,6 +59,8 @@ Log file schema versions and app versions are independent. Both are noted where 
   queued in TASKS.
 
 ### Fixed
+
+- **Video sync silently fabricated an offset for footage from a different run, and overlay elements bound to math channels always rendered no-data (2026-07-11).** Both found on the first real GoPro footage; neither was reachable from the synthetic fixtures. (1) `estimate_sync` mapped the video's anchor epoch through `epoch_ms_to_time_secs`, which **clamps** to the `GPS_EpochMs` span — right for an epoch known to belong to the session (a lap crossing), wrong for one arriving from outside it. A video shot ~3 h after a session saturated to the session's last second and *passed* the overlap check with a fabricated offset; a video starting 5 s before its session clamped to 0.0 and lost the lead-in. Added `epoch_ms_to_time_secs_extrapolated` (linear extrapolation past both ends using the edge sample interval, in-range behaviour bit-identical) and pointed sync at it, which is what makes the `NoOverlap` guard — and the app's `VideoSyncMismatchException` — reachable at all. Every pre-existing sync test used a fixture with no `GPS_EpochMs`, exercising only the origin-subtraction path; the new tests use a GPS-clocked session. (2) `SampleContext::prepare` resolved layout channel references against `handle.channels()`, the parsed+synthesized *library* list, which excludes the derived store — so any element bound to a math channel was skipped, including the ones in the engine's own example layout (`Roll_deg`, `TravelFront_mm`). `channel_samples`/`channel_sample_times` had also never migrated to the store-aware `with_channel` path. Added `SessionHandle::channel_meta` (store-aware) and routed all three through it. **Spec disposition:** spec-during — §33.1/§33.3.
 
 - **The app made you re-scan for the device far too often — auto-connect only fired once at startup, and the OTA reconnect was a single fragile attempt (2026-07-09).** Two linked reconnect gaps surfaced during v0.1.0 hardware bring-up: (1) `AutoConnectController` fired exactly one `connect()` at app open and gave up on failure, so opening the app before powering the device on (or any unexpected BLE drop) left you tapping "Scan for new devices" by hand; (2) the OTA post-reboot reconnect (`_scheduleReconnect`) did a single `disconnect()`+`connect()` after a flat 5 s hold — one missed advertising window and the reconnect failed. Reworked `AutoConnectController` into a **foreground-gated repeating scan loop**: while disconnected it re-attempts `connect()` on a steady cadence, so powering a device on connects it and an unexpected drop recovers on its own (the "headphones" model). A user **Disconnect** parks the loop for the session (re-armed by a manual scan); the OTA push parks it around its own reconnect, which now uses the tested `reconnectAfterReboot()` (boot delay + retries) — its `connect()` still drives the post-reboot status frame the armed auto-confirm consumes (§27.7). `DeviceNotifier.connect()` gained an in-flight dedup guard so the scanner, a manual scan, and the OTA reconnect can never launch two simultaneous scans/GATT connects. **Spec disposition:** spec-during — §23 (Device tab) auto-connect paragraph rewritten from one-shot to continuous.
 

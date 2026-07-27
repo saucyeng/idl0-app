@@ -3230,7 +3230,10 @@ normalized `[x, y, w, h]` fractions of the canvas. `canvas` (`"1920x1080"`) is
 design-space for stroke/font scaling only — never an output resolution.
 Channel references resolve like charts (raw, synthesized, math); a missing
 channel degrades that element to its no-data state (`—`), never fails the
-render.
+render. "Like charts" includes the **derived store**: an element bound to a
+math channel resolves through `SessionHandle::channel_meta` /
+`channel_samples`, which read the store as well as the parsed set — the
+`channels()` library list alone would render every math binding no-data.
 
 ### 33.2 Sampling
 
@@ -3252,6 +3255,20 @@ estimate_sync` returns `SyncEstimate { offset_s, confidence, method }`:
 else `creation_time` (confidence 0.3). Manual offsets always win; rendering
 never re-estimates. Video/session overlap is validated — none → typed error
 listing both ranges. `session_time_s = video_time_s + sync_offset_s`.
+
+The anchor epoch maps onto session time through
+`epoch_ms_to_time_secs_extrapolated`, which extrapolates past both ends of
+`GPS_EpochMs` rather than clamping to it. Clamping is correct for epochs
+known to belong to the session (a lap crossing) but wrong for one arriving
+from outside it: a saturated value is indistinguishable from a real edge
+match, so footage from a different run maps to the session's last second and
+passes the overlap check with a fabricated offset. Extrapolation keeps
+out-of-range anchors out of range, which is what makes the `NoOverlap` guard
+— and the app's `VideoSyncMismatchException` — reachable at all.
+
+Cameras without GPS (e.g. HERO11 Black Mini) write GPMF telemetry with no
+`GPS5`/`GPS9`/`GPSU` stream at all; those fall through to `creation_time`,
+whose accuracy is the camera clock's.
 
 The app runs this estimation at link time through the bridge (`video_probe`,
 `estimate_video_sync` against the retained `SessionHandle`) and persists the
@@ -3276,16 +3293,35 @@ Output writes to `<out>.part`, renamed on success. VFR input is normalized to
 CFR; rotation metadata is applied at probe time. Progress = frames fed /
 total; cancel kills the child and removes the `.part`.
 
+**Orientation.** `ExportPlan.rotate_ccw_deg` (0/90/180/270) is an *extra*
+counter-clockwise rotation composed on top of container rotation metadata,
+for footage shot with the camera deliberately mounted rotated where the
+container records no rotation to correct it. It becomes a `transpose`
+(`2` = 90° CCW, `1` = 90° CW) or `hflip,vflip` stage ahead of the overlay in
+the filter graph, so the overlay composites onto the *rotated* frame and its
+text stays upright. `frame_dims()` — the size the renderer is asked for — is
+the final displayed frame, both rotations applied.
+
+**Hardware acceleration.** `ExportPlan.hwaccel` (`cuda`, `qsv`, `d3d11va`, …)
+selects an ffmpeg hardware decoder for the source input only; decoded frames
+are downloaded to system memory so the overlay and rotation stay on the
+portable CPU filter path. Pair with a hardware `encoder` (`h264_nvenc`) to
+move both ends off the CPU. Both are opt-in: the default path spawns the
+same software argv as before.
+
 ### 33.6 CLI
 
 - `idl-rs overlay <session.idl0> --video <v.mp4> --workbook <w.idl0wb>
   [--layout <name>] [--track <t.idl0t>] [--offset <s>] [--start <s>]
-  [--duration <s>] [--output <out.mp4>] [--encoder <name>] [--ffmpeg <path>]`
+  [--duration <s>] [--output <out.mp4>] [--encoder <name>] [--rotate <deg>]
+  [--hwaccel <name>] [--ffmpeg <path>]`
   — bulk command (§29.7 envelope: artifact on success, error envelope on
   stderr). `--layout` optional only when the workbook has exactly one layout.
   `--track` enables the lap panel; without it lap elements render no-data.
   `--offset` skips auto-sync. Math channels are applied (`apply_workbook`)
-  before sampling.
+  before sampling. `--rotate` takes a quarter turn only (0/90/180/270 or a
+  negative equivalent); anything else is rejected at parse time rather than
+  silently ignored.
 - `idl-rs video sync <session.idl0> --video <v.mp4>` — structured command:
   offset/confidence/method (text or `--format json`).
 - `idl-rs video probe --video <v.mp4>` — structured command: container info +

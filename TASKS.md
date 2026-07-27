@@ -139,6 +139,25 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
       whether the `accel_z`-off-on-IMU1/2 channel mask (`0x3BEFF`) is intentional.
 
 ## Completed
+- [x] **Video overlay: first real-footage validation + two fixes (2026-07-11)**
+      — validated the phase-1 engine against real GoPro HERO11 Black Mini
+      footage (HEVC 2704×2028 @ 59.94, 115 s). The hand-rolled ISO-BMFF
+      walker matched `ffprobe` exactly on every field (dims, fps, duration,
+      creation time, `gpmd` presence). Two bugs only real data could surface:
+      the sync anchor was clamped into the `GPS_EpochMs` span (fabricated
+      offsets for non-matching footage, lost lead-in for matching footage —
+      fixed with `epoch_ms_to_time_secs_extrapolated`), and overlay elements
+      bound to math channels always rendered no-data (`prepare` consulted the
+      parsed channel library, not the derived store — fixed with
+      `SessionHandle::channel_meta`). Added `--rotate` (quarter turns, for a
+      rotated camera mount) and `--hwaccel` (GPU decode) to `idl-rs overlay`.
+      Engine 591 tests, workspace 665, all green. Spec-during: §33.1/§33.3/
+      §33.5/§33.6.
+      **Note:** the Mini has no GPS receiver, so its GPMF carries no
+      `GPS5`/`GPS9`/`GPSU` — sync falls back to container `creation_time`
+      (confidence 0.3) and is only as good as the camera clock. GPMF-anchored
+      sync (confidence 0.9) is still unvalidated against real bytes; it needs
+      footage from a GPS-equipped GoPro.
 - [x] **Video overlay phase 2 — app data layer (2026-07-10)** — `.idl0w` v8
       `videos[]` link entries (VideoLink: path, size+mtime re-link identity,
       sync offset/method/confidence, label); workbook v2 Dart
