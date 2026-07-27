@@ -132,6 +132,13 @@ jobs:
 
       - name: Build Windows
         working-directory: app
+        env:
+          # permission_handler_windows still includes <experimental/coroutine>,
+          # which the runner's newer MSVC rejects as a hard error (STL1011).
+          # cl.exe reads the CL env var for extra flags on every compile, so
+          # define the documented silence macro until the plugin moves to the
+          # C++20 <coroutine> header. Harmless to the Rust/cargokit build.
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: flutter build windows --release --build-name="$VERSION"
 
       - name: Package zip
