@@ -12,6 +12,32 @@ Log file schema versions and app versions are independent. Both are noted where 
 
 ### Added
 
+- **Attitude moved from the IEKF to expressions — an AHRS in the math language
+  (2026-07-28).** `Roll (deg)`, `Pitch (deg)`, `Longitudinal accel (g)` and
+  `Lateral accel (g)` are now built-in **math channels** rather than estimator
+  outputs, joined by five named intermediates (`Speed (m/s)`,
+  `Roll rate (deg/s)`, `Roll reference (deg)`, `Pitch rate (deg/s)`,
+  `Pitch reference (deg)`). No engine code was needed — every primitive already
+  existed. Motivation: on real footage the estimator's roll looked **delayed**.
+  It was: a Kalman filter is causal, and the RTS smoother covers only the wheel
+  chains, never attitude. These channels blend an inertially-compensated
+  accelerometer reference with high-passed integrated gyro through `butter`,
+  which is `sosfiltfilt` — zero-phase, so the 0.2 Hz crossover adds **no lag**.
+  Lean uses `sin φ = a_y − v·g_z/g` (exact: the body yaw rate carries the same
+  `cos φ` the centripetal projection needs, so it cancels); pitch uses
+  `sin θ = (a_x − dv/dt)/g`; pitch rate uses the Euler rate `sin φ·r − cos φ·q`,
+  without which a 20° corner injects ~8 deg/s of false pitch. Speed comes from
+  `differentiate([Distance])`, which is already at the IMU rate — so no
+  `resample` was required. Both lowpasses sit **inside** the `asin`: on real
+  data the raw argument saturated the ±1 clamp for 10% (roll) and 18% (pitch)
+  of samples, biasing the level; filtering before the nonlinearity drops that to
+  **zero**. Verified against a synthetic coordinated-turn ride by 11 tests in
+  `rust/core/src/math/tests_ahrs.rs`, which pin the shipped expression text
+  verbatim — including the two blind-spot cases (an accelerometer reads ≈0° of
+  lean in a coordinated turn, and reads braking as nose-down pitch), so the
+  compensation cannot be silently dropped. The estimator-backed `attitude()` /
+  `body_accel()` functions remain as diagnostics. SPEC §19.
+
 - **Attitude channels — roll, pitch and body acceleration (2026-07-28).** The
   suspension IEKF already estimated chassis attitude every sample and discarded
   it; it now emits `roll` and `pitch` (deg, ISO 8855 — positive is leaning right

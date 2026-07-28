@@ -8,6 +8,29 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
 
 ## Active / awaiting hardware verification
 
+- [ ] **Validate the AHRS attitude channels against real footage (2026-07-28)**
+      — supersedes the estimator-roll validation below for the *user-facing*
+      channels. `Roll (deg)` and friends are now expressions (SPEC §19), proven
+      on synthetic data but not yet judged against a real ride. Re-render with
+      `D:/Media/2026/roll_overlay.idl0wb` (already updated to the AHRS
+      definitions; `.bak` holds the previous empty-math version):
+      `idl-rs overlay <session> --video <mp4> --workbook <wb> --rotate 90
+      --hwaccel cuda --start 68 --duration 8`. On session `d365a19a…` the chain
+      gives roll −38…+33° (σ 12.4°, median −1.1°) and **zero** clamp saturation.
+      Watch for two things the synthetic tests cannot judge: whether lean still
+      reads *delayed* (it should not — the blend is zero-phase), and whether
+      `Pitch (deg)`'s **−13° median** is a genuine sustained descent or an
+      accelerometer-X bias. There is no independent slope reference in the log,
+      so only the rider can settle that one.
+
+- [ ] **`deg2rad` / `rad2deg` validate in Dart but have no evaluator arm
+      (2026-07-28)** — they are in `MathChannel.knownFunctions` and in the SPEC
+      §19 table, but `math::eval::call_function` has no match arm, so an
+      expression using them passes app validation and then fails at evaluation.
+      Either implement the two arms (trivial) or drop them from the allowlist.
+      Same class of gap as the `NotImplemented` stubs now flagged in §19.
+
+
 - [ ] **Validate estimator roll against real footage (2026-07-28)** — the
       attitude phase-1 code is shipped and unit-tested, but its *physical*
       correctness on a real ride is unconfirmed. Two checks: (1) render the

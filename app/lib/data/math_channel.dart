@@ -234,10 +234,91 @@ const List<MathChannel> kBuiltinMathChannels = [
     color: '#FFFF9800',
     expression: 'wheel_velocity("rear")',
   ),
-  // Attitude and gravity-removed body acceleration — same estimator run as the
-  // suspension channels above, surfaced the same way. Unlike `wheel_*`, these
-  // expressions evaluate for real in the engine (idl-rs `math::eval`), so they
-  // work in the CLI as well as the app.
+  // ---------------------------------------------------------------------
+  // Attitude (AHRS) and gravity-removed body acceleration.
+  //
+  // These are ordinary expressions — no estimator run. They implement a
+  // turn-compensated complementary filter over IMU0 + GPS-derived speed:
+  //
+  //   * an inertially-compensated accelerometer *reference*, which is
+  //     memoryless (no phase lag) but noisy, and
+  //   * integrated gyro, which has the right dynamics but drifts,
+  //
+  //   blended by a zero-phase band split at 0.2 Hz (`butter` is sosfiltfilt,
+  //   forward-backward), so the crossover adds no phase distortion.
+  //
+  // The compensation is the whole point: a bare accelerometer is *blind* to
+  // lean in a coordinated turn (the resultant runs down the bike's own
+  // vertical axis — the turn-and-bank ball stays centred) and reads braking
+  // as nose-down pitch that never happened.
+  //
+  // **These expression strings are load-bearing.** They are mirrored verbatim
+  // by `AHRS_CHANNELS` in `rust/core/src/math/tests_ahrs.rs`, which proves
+  // them physically correct against a synthetic coordinated-turn ride. Change
+  // one, change both.
+  //
+  // `pi` and `g` are the language's universal constants (SPEC §19) — bare
+  // identifiers resolved to literals at parse time, so no magic numbers appear
+  // in the expressions.
+  //
+  // The engine's estimator-backed `attitude()` / `body_accel()` functions
+  // still exist and still reflect what the suspension filter believes; they
+  // are kept for diagnostics and cross-checking. These channels are the
+  // user-facing attitude surface. See docs/IDL0_SPEC.md §19.
+  // ---------------------------------------------------------------------
+  MathChannel(
+    id: 'builtin:SpeedMps',
+    name: 'Speed (m/s)',
+    quantity: 'velocity',
+    units: 'm/s',
+    sampleRateHz: 0.0,
+    decimalPlaces: 2,
+    color: '#FF4DB6AC',
+    // `Distance` is synthesized at the IMU rate (a lazy lerp of the 1 Hz GPS
+    // integral), so differentiating it yields speed already rate-matched to
+    // the gyro — which is what lets the whole chain be expressed without a
+    // resample(). Its derivative is a staircase, so smooth once here and
+    // reuse; both compensation terms need only the slow component.
+    expression: 'butter(2, 0.5, "low", differentiate([Distance]))',
+  ),
+  MathChannel(
+    id: 'builtin:RollRate',
+    name: 'Roll rate (deg/s)',
+    quantity: 'angular_velocity',
+    units: 'deg/s',
+    sampleRateHz: 0.0,
+    decimalPlaces: 1,
+    color: '#FFA5D6A7',
+    // IMU0 is mounted X-rear/Y-right — a 180° yaw from the ISO chassis frame
+    // (X-forward, Y-left, Z-up) — so chassis X and Y are the negated sensor
+    // axes. Positive ⇒ rolling to the right.
+    expression: '-[IMU0_GyroX]',
+  ),
+  MathChannel(
+    id: 'builtin:RollReference',
+    name: 'Roll reference (deg)',
+    quantity: 'angle',
+    units: 'deg',
+    sampleRateHz: 0.0,
+    decimalPlaces: 1,
+    color: '#FFC5E1A5',
+    // Lateral specific force is f_y = v·ψ̇·cos φ + g·sin φ — the centripetal
+    // term is horizontal, so it projects onto the tilted body-y axis through
+    // cos φ. The *body* yaw rate carries the same factor (g_z = ψ̇·cos φ), so
+    // substituting it cancels the projection exactly:
+    //     sin φ = a_y − v·g_z/g
+    // No small-angle assumption and no iteration — using the nav-frame turn
+    // rate here would be wrong, not more accurate.
+    //
+    // The lowpass sits INSIDE the asin, not after it. On real trail data the
+    // raw argument exceeds ±1 g about 10% of the time, and clamping those to
+    // ±90° then averaging biases the level (measured on a real session before
+    // this was moved). Filtering in the measurement domain, before the
+    // nonlinearity, drops saturation to zero. `declip` repairs samples where
+    // the accelerometer railed on a hard hit, matching the estimator path.
+    expression:
+        'asin(clamp(butter(2, 0.2, "low", declip(-[IMU0_AccelY]) - [Speed (m/s)] * [IMU0_GyroZ] * pi / 180 / g), -1, 1)) * 180 / pi',
+  ),
   MathChannel(
     id: 'builtin:EstRoll',
     name: 'Roll (deg)',
@@ -246,7 +327,42 @@ const List<MathChannel> kBuiltinMathChannels = [
     sampleRateHz: 0.0,
     decimalPlaces: 1,
     color: '#FF81C784',
-    expression: 'attitude("roll")',
+    // Reference (already band-limited) + high-passed integrated gyro. The
+    // highpass branch strips gyro bias, which would otherwise integrate into
+    // unbounded phantom lean. 0.2 Hz sits below cornering dynamics
+    // (~0.5–2 Hz), well above drift.
+    expression:
+        '[Roll reference (deg)] + integrate([Roll rate (deg/s)]) - butter(2, 0.2, "low", integrate([Roll rate (deg/s)]))',
+  ),
+  MathChannel(
+    id: 'builtin:PitchRate',
+    name: 'Pitch rate (deg/s)',
+    quantity: 'angular_velocity',
+    units: 'deg/s',
+    sampleRateHz: 0.0,
+    decimalPlaces: 1,
+    color: '#FFDCE775',
+    // NOT simply the body Y rate. The Euler rate is θ̇ = cos φ·q − sin φ·r,
+    // and our convention is nose-up-positive (−θ), giving sin φ·r − cos φ·q;
+    // with q = −[IMU0_GyroY] that is the form below. Skipping this coupling
+    // injects a large false pitch rate through a sustained corner — at 20° of
+    // lean the sin φ·r term is ~8 deg/s, which is the entire signal.
+    expression:
+        'sin([Roll (deg)] * pi / 180) * [IMU0_GyroZ] + cos([Roll (deg)] * pi / 180) * [IMU0_GyroY]',
+  ),
+  MathChannel(
+    id: 'builtin:PitchReference',
+    name: 'Pitch reference (deg)',
+    quantity: 'angle',
+    units: 'deg',
+    sampleRateHz: 0.0,
+    decimalPlaces: 1,
+    color: '#FFE6EE9C',
+    // f_x = a_x + g·sin θ, so sin θ = (f_x − dv/dt)/g. Without removing dv/dt
+    // a bare accelerometer reads every brake as nose-down pitch. Lowpass sits
+    // inside the asin for the same reason as the roll reference above.
+    expression:
+        'asin(clamp(butter(2, 0.2, "low", declip(-[IMU0_AccelX]) - differentiate([Speed (m/s)]) / g), -1, 1)) * 180 / pi',
   ),
   MathChannel(
     id: 'builtin:EstPitch',
@@ -256,8 +372,11 @@ const List<MathChannel> kBuiltinMathChannels = [
     sampleRateHz: 0.0,
     decimalPlaces: 1,
     color: '#FFAED581',
-    expression: 'attitude("pitch")',
+    expression:
+        '[Pitch reference (deg)] + integrate([Pitch rate (deg/s)]) - butter(2, 0.2, "low", integrate([Pitch rate (deg/s)]))',
   ),
+  // Gravity-removed body acceleration. Attitude is what tells us how much of
+  // each accelerometer axis is gravity; subtracting it leaves real acceleration.
   MathChannel(
     id: 'builtin:EstAccelLong',
     name: 'Longitudinal accel (g)',
@@ -266,7 +385,9 @@ const List<MathChannel> kBuiltinMathChannels = [
     sampleRateHz: 0.0,
     decimalPlaces: 2,
     color: '#FFE57373',
-    expression: 'body_accel("long")',
+    // Positive ⇒ accelerating forward.
+    expression:
+        'declip(-[IMU0_AccelX]) - sin([Pitch (deg)] * pi / 180)',
   ),
   MathChannel(
     id: 'builtin:EstAccelLat',
@@ -276,7 +397,10 @@ const List<MathChannel> kBuiltinMathChannels = [
     sampleRateHz: 0.0,
     decimalPlaces: 2,
     color: '#FFBA68C8',
-    expression: 'body_accel("lat")',
+    // Positive ⇒ accelerating right. a_lat = sin φ − a_y, and a_y is
+    // −[IMU0_AccelY], which folds the sign into a plain addition.
+    expression:
+        'sin([Roll (deg)] * pi / 180) - declip(-[IMU0_AccelY])',
   ),
 ];
 
