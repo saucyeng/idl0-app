@@ -12,7 +12,9 @@ specs and are **not** designed here.
 
 Get physically correct **roll and pitch** out of the engine and onto video, and
 add two new overlay visualizations — a **rolling suspension spectrogram** and a
-**g-g plot** — reusing the estimator and DSP the engine already has.
+**scatter** element (which, configured with acceleration channels and reference
+rings, gives the friction-circle / g-g view) — reusing the estimator and DSP
+the engine already has.
 
 The trigger: the lean angle in the first real overlay render (2026-07-15
 footage) reads near zero through berms, which is where lean is greatest.
@@ -55,7 +57,7 @@ works**, not new estimation.
 | D1 | Roll means **absolute lean vs gravity** (plane-AHRS convention), not ground-relative | What the IEKF already estimates; well observed and drift-free. Ground-relative needs a surface-normal estimate the sensors observe poorly. |
 | D2 | **No traction/friction-demand channel** in this spec | Wanted, but deserves its own design session. |
 | D3 | Use the estimator's **hardcoded mount calibration as-is** | Smallest scope. Geometry-as-configuration is needed anyway for (D) understeer, which wants a wheelbase `BikeGeometry` does not have, so it has a natural home there. |
-| D4 | Spectrogram and g-g are **video overlay elements**, not Analyze charts | User intent: these are for footage. |
+| D4 | Spectrogram and scatter are **video overlay elements**, not Analyze charts | User intent: these are for footage. A friction-circle (g-g) view is a *configuration* of the scatter element, not a type of its own. |
 | D5 | Spectrogram shows suspension **velocity** | Damping acts on velocity; conventional view for reading compression/rebound behaviour. |
 | D6 | Estimator outputs become **real evaluator functions** | `wheel_travel`/`wheel_velocity` are today Dart-side name sentinels with no evaluator match arm, so workbooks using them render in the app and fail in `idl-rs overlay`. Closing this makes workbooks portable and lets the Dart interception be deleted. |
 | D7 | Also emit **gravity-removed vehicle-frame acceleration** | The physically correct friction-circle quantity; a few lines once attitude is out. |
@@ -80,7 +82,7 @@ Phase 1 (engine only)
   ⇒ roll renders on video from the CLI using the EXISTING attitude element
 
 Phase 2 (overlay only)
-  overlay::model         → Spectrogram, GgPlot element variants
+  overlay::model         → Spectrogram, Scatter element variants
   overlay::sample        → prepare-once STFT; per-frame column slice / trail window
   overlay::render        → heatmap painter; friction-circle painter
   app/lib/data/overlay_layout.dart → Dart mirrors
@@ -164,21 +166,54 @@ lean on video, from the CLI, with no phase-2 work.
 
 ## 6. Phase 2 — new overlay elements
 
+The app already has `spectrogram_chart.dart` and `scatter_chart.dart`, so both
+of these element types have a Flutter counterpart today. That makes the
+duplication boundary the governing constraint of this phase:
+
+- **Painters are duplicated, and that is irreducible.** Flutter cannot run
+  inside a headless ffmpeg pipeline, which is the whole reason the overlay
+  renderer is tiny-skia in the first place. Two painters is the cost of having
+  a CLI export at all.
+- **Nothing else may be.** The numbers already come from one place — both
+  worlds call the same engine DSP. The option vocabulary, serialized shape,
+  and type names must also stay single-sourced. Where the chart side already
+  has a type for something, the overlay embeds *that* type rather than
+  declaring a parallel one.
+
+Concretely: the spectrogram element embeds the existing `SpectralParams`
+(§6.1), and there is no `gg_plot` type because a friction circle is a scatter
+with rings (§6.2). Each new element type is therefore one new painter and
+**zero** new concepts, which is what leaves the convergence spec (D9) with a
+merge rather than a reconciliation.
+
 ### 6.1 Spectrogram
 
 ```json
 { "type": "spectrogram", "rect": [0.04, 0.86, 0.92, 0.12],
   "channel": "Front velocity (mm/s)",
   "window_s": 6.0, "max_hz": 30.0, "db_floor": -40.0,
-  "nperseg": 256, "noverlap": 128, "fft_window": "hann",
-  "detrend": "constant", "scaling": "density" }
+  "spectral": { "...": "SpectralParams, verbatim" } }
 ```
 
-Option names mirror `spectrogram()`'s own parameters (`nperseg`, `noverlap`,
-`window`, `detrend`, `scaling`) rather than inventing a parallel vocabulary —
-this is the D9 pre-shaping. The one rename is `window` → `fft_window`, because
-`window_s` (the displayed time span) already occupies the shorter name and the
-two mean entirely different things.
+**The DSP parameters are not redeclared.** The app already has a
+`SpectralParams` type — shared DSP settings for `ChartType.fft` and
+`ChartType.spectrogram` (window, segment length, overlap, detrend, scaling,
+frequency-axis scale), serialized on the chart slot with per-chart-type
+defaults. The overlay element embeds **that same object under the same key**,
+rather than inventing a parallel `nperseg`/`noverlap`/`fft_window` vocabulary
+beside a type that already means exactly this.
+
+The seam: **DSP parameters come from the shared `spectral` object;
+presentational parameters (`rect`, `window_s`, `max_hz`, `db_floor`) stay on
+the element**, because they describe the overlay's own drawing area and have no
+chart-slot equivalent.
+
+`SpectralParams` is currently Dart-only, so this adds a Rust mirror of it in
+the engine's overlay model. That inverts the usual direction — for
+`OverlayLayout` the engine is source of truth and Dart mirrors — so the parity
+test runs the other way, asserting the Rust mirror round-trips a
+`SpectralParams` JSON fixture taken from the Dart side. Same discipline,
+opposite arrow.
 
 **The critical design point:** the STFT is computed **once** in `prepare()`
 over the whole session. Per-frame sampling reduces to selecting the column
@@ -193,24 +228,41 @@ Rendering: X is time with "now" at the right edge (matching `trace_strip`), Y
 is frequency from 0 to `max_hz`, colour is magnitude in dB clipped at
 `db_floor`. Empty/short input renders the no-data state, never fails.
 
-### 6.2 g-g plot
+### 6.2 Scatter
+
+An XY element binding any two channels, with optional reference rings, a
+trailing window, and equal-aspect plotting.
 
 ```json
-{ "type": "gg_plot", "rect": [0.66, 0.78, 0.30, 0.12],
+{ "type": "scatter", "rect": [0.66, 0.78, 0.30, 0.12],
   "x_channel": "Lateral accel (g)", "y_channel": "Longitudinal accel (g)",
-  "range_g": 1.5, "trail_s": 3.0 }
+  "x_range": [-1.5, 1.5], "y_range": [-1.5, 1.5],
+  "equal_aspect": true, "rings_at": [0.5, 1.0, 1.5],
+  "show_axes": true, "trail_s": 3.0 }
 ```
 
-Binds two **arbitrary** channels rather than hardcoding the accel axes, so it
-can point at the phase-1 channels or at hand-authored ones for comparison.
+| Option | Meaning |
+|---|---|
+| `x_channel` / `y_channel` | Any two channels. Mirrors the existing scatter chart's binding shape. |
+| `x_range` / `y_range` | Explicit axis limits in channel units. Omitted ⇒ auto-fit. |
+| `equal_aspect` | Plot into the largest centred square in `rect`. **Required for rings to render as circles** rather than ellipses when `rect` is not square. |
+| `rings_at` | Reference-circle radii in channel units. Empty ⇒ no rings. |
+| `show_axes` | Cross-hairs through the origin. |
+| `trail_s` | Trailing window in seconds. Omitted ⇒ every point in scope (a static scatter). |
 
-`ElementSample::Gg { current: Option<(f64, f64)>, trail: Vec<(f64, f64)> }`.
+`ElementSample::Scatter { current: Option<(f64, f64)>, trail: Vec<(f64, f64)> }`.
 The trail is the trailing `trail_s` of points decimated to the existing
 `MAX_TRACE_POINTS` cap.
 
-Rendering: friction-circle rings at 0.5 g intervals out to `range_g`,
-cross-hairs through the origin, trail with alpha falling off with age, and a
-filled dot at the current value.
+Rendering: rings at `rings_at`, cross-hairs if `show_axes`, trail with alpha
+falling off with age, filled dot at the current value. With no rings and no
+trail it degenerates to an ordinary XY scatter — which is the point: one
+element serves both uses, and the convergence spec later has a single scatter
+concept to unify rather than two.
+
+Configured with acceleration channels, a symmetric equal-aspect range and rings
+at 0.5 g intervals, this is a friction-circle (g-g) plot. That ships as a
+documented layout example, not as code.
 
 ### 6.3 Dart mirror
 
