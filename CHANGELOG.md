@@ -12,6 +12,18 @@ Log file schema versions and app versions are independent. Both are noted where 
 
 ### Added
 
+- **Download site: software.saucyeng.com (2026-07-27).** A single
+  self-contained static page (`site/`) published to GitHub Pages gives the IDL0
+  app a public download home. It reads the latest release live from the GitHub
+  Releases API in the browser — an OS-detected primary button, the
+  Android/Linux/Windows asset list, and the version/date — so cutting a new app
+  tag updates the page with no redeploy; if the API is unreachable it falls back
+  to the Releases page so downloads never break. Deployed by
+  `.github/workflows/pages.yml` on changes under `site/`; custom domain via
+  `site/CNAME`. **Spec disposition:** no `IDL0_SPEC.md` change — a download page
+  is a distribution surface, not system behaviour. README gains a Download link
+  (§10, audience-facing).
+
 - **Video overlay: `--rotate` and `--hwaccel` (2026-07-11).** `idl-rs overlay`
   gained `--rotate <0|90|180|270>` — an extra counter-clockwise rotation
   composed on top of container rotation metadata, for footage shot with the

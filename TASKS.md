@@ -139,6 +139,15 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
       whether the `accel_z`-off-on-IMU1/2 channel mask (`0x3BEFF`) is intentional.
 
 ## Completed
+- [x] **Download site — software.saucyeng.com (2026-07-27)** — public download
+      home for the app as a self-contained GitHub Pages static page (`site/`):
+      OS-detected primary button + Android/Linux/Windows list + version, all
+      read live from the Releases API (no per-release redeploy), with a
+      Releases-page fallback when the API is unreachable/rate-limited. Deploy
+      workflow `.github/workflows/pages.yml`; custom domain in `site/CNAME`;
+      README Download link. No `IDL0_SPEC.md` change (distribution surface, not
+      system behaviour). **User-gated go-live:** add DNS `CNAME software →
+      saucyeng.github.io` + set repo Pages source to "GitHub Actions".
 - [x] **Video overlay: first real-footage validation + two fixes (2026-07-11)**
       — validated the phase-1 engine against real GoPro HERO11 Black Mini
       footage (HEVC 2704×2028 @ 59.94, 115 s). The hand-rolled ISO-BMFF

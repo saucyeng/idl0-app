@@ -8,6 +8,13 @@ IDL0 is a custom data logger designed for mountain bike performance analysis and
 
 The companion app handles all signal processing, filtering, FFT, calibration, and visualization. The firmware does one thing: write raw sensor data to SD card as fast as possible.
 
+## Download
+
+Get the companion app for **Android, Linux, or Windows** at
+**[software.saucyeng.com](https://software.saucyeng.com)** — it always tracks the
+latest [release](https://github.com/saucyeng/idl0-app/releases). (macOS and iOS
+builds come later.)
+
 ## Hardware
 
 - **MCU:** Seeed Studio XIAO ESP32-C6
