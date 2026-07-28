@@ -593,6 +593,18 @@ bracketed, a bare `g` is unambiguously the constant.)
 | Rotations      | `rotate_mat(v, m00,m01,m02,m10,m11,m12,m20,m21,m22)` (row-major, scalar entries), `rotate_axis(v, ax, ay, az, angle)` (scalars), `rotate_euler(v, roll, pitch, yaw)` (angles may be channels) |
 | Lap            | `current_lap()`, `lap_start_time(n)`, `lap_start_distance(n)`, `sector_number()` |
 | Variance       | `variance_time(ch)`, `variance_dist(ch)` — Main lap vs overlay laps |
+| Estimator      | `attitude("roll"\|"pitch")` → deg; `body_accel("long"\|"lat")` → g; `wheel_travel("front"\|"rear")` → mm; `wheel_velocity("front"\|"rear")` → mm/s |
+
+**Estimator functions.** All eight outputs come from a single cached run of the
+offline geometry-constrained estimator (`idl-rs` `estimate::run`) — the first
+call in a session runs it, the rest read the derived store. `attitude` is
+absolute against gravity: roll is positive leaning **right**, pitch positive
+**nose up**. `body_accel` is gravity-removed acceleration in the chassis body
+frame, positive **forward** and **right**; because it resolves in the body
+frame it needs only well-observed tilt and never depends on yaw. A session
+without IMU0 accel and gyro channels fails these with a runtime error naming
+the missing input, and degrades only that channel. Geometry is currently the
+compile-time reference bike (see the design doc for the per-bike follow-up).
 
 **Deferred functions** parse and validate but throw "not yet implemented" at
 eval time: `spectrogram`, `hilbert`, `correlate`, `convolve`, `resample`,

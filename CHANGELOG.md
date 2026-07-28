@@ -12,6 +12,26 @@ Log file schema versions and app versions are independent. Both are noted where 
 
 ### Added
 
+- **Attitude channels — roll, pitch and body acceleration (2026-07-28).** The
+  suspension IEKF already estimated chassis attitude every sample and discarded
+  it; it now emits `roll` and `pitch` (deg, ISO 8855 — positive is leaning right
+  and nose up) plus gravity-removed `accel_long`/`accel_lat` (g, resolved in the
+  body frame so they need only well-observed tilt and never touch yaw). Aimed at
+  lean reading ≈0° through berms, where an accelerometer-derived angle is
+  structurally blind: in a coordinated turn the resultant force runs down the
+  bike's own vertical axis. Estimator outputs are now **real evaluator
+  functions** — `attitude()`, `body_accel()`, `wheel_travel()`,
+  `wheel_velocity()` — resolved through a new `ChannelLookup::estimator_channel`
+  hook that runs the estimator once per session and caches all eight channels,
+  so they work in `idl-rs` CLI renders as well as the app. The hook is forwarded
+  through all three production lookup wrappers (`MemoLookup`,
+  `SharedHandleLookup`, `CellLookup`); as a defaulted trait method it silently
+  returned `None` through each until wired, which on a real session read as "the
+  estimator could not run" despite IMU0 being present. **Spec disposition:**
+  spec-during — §19 function table; design doc
+  `docs/superpowers/specs/2026-07-11-attitude-and-overlay-visualization-design.md`.
+  **Physical validation against real footage is still outstanding** — see TASKS.
+
 - **Download site: software.saucyeng.com (2026-07-27).** A single
   self-contained static page (`site/`) published to GitHub Pages gives the IDL0
   app a public download home. It reads the latest release live from the GitHub

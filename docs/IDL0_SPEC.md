@@ -1621,6 +1621,9 @@ All steps user-overridable via math channel expressions.
 | Lap | `current_lap()` — 1-based lap number at each sample, `0` outside any lap |
 | Lap | `lap_start_time(n)` — session-relative start time (s) of lap `n`, `NaN` when out of range |
 | Lap | `sector_number()` — 0-based sector index at each sample, `NaN` outside any sector |
+| Estimator | `attitude("roll"\|"pitch")` — chassis attitude vs gravity, deg (roll positive leaning right, pitch positive nose up) |
+| Estimator | `body_accel("long"\|"lat")` — gravity-removed acceleration in the chassis body frame, g (positive forward / right) |
+| Estimator | `wheel_travel("front"\|"rear")` — suspension travel, mm; `wheel_velocity("front"\|"rear")` — mm/s |
 
 **Aggregates (channel → scalar).** Each reduces a channel (or a `{col[]}` table
 column, §26.11) to one value over its finite samples — non-finite samples are

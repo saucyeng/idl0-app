@@ -8,6 +8,38 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
 
 ## Active / awaiting hardware verification
 
+- [ ] **Validate estimator roll against real footage (2026-07-28)** — the
+      attitude phase-1 code is shipped and unit-tested, but its *physical*
+      correctness on a real ride is unconfirmed. Two checks: (1) render the
+      berm footage with `Roll (deg)` on the attitude element and confirm the
+      indicator tracks visible lean —
+      `idl-rs overlay <session> --video <mp4> --workbook <wb> --rotate 90
+      --hwaccel cuda --start 68 --duration 8`; (2)
+      `cargo run --release --example lean_crosscheck -- <session>` compares
+      estimator roll against `−atan(v·ψ̇/g)` from GPS speed and mount-corrected
+      chassis yaw rate. On session `edb96102…` that cross-check gave **80%
+      sign agreement, mean |diff| 16.8°** over 10 one-second steady-turn
+      windows (100% and 11.4° under a stricter gate with only 3 windows) —
+      suggestive but not decisive, because one-second windows on real trail
+      corners are a blunt instrument and the coordinated-turn formula assumes a
+      steady radius and speed. If lean looks wrong on video, suspect the
+      compile-time mount calibration (fitted 2026-06-20/06-13) before the
+      filter. **Phase 2 of the design doc — spectrogram and scatter overlay
+      elements — is gated on this.**
+
+- [ ] **Remove the Dart `wheel_*` sentinel interception (2026-07-28)** — the
+      engine now implements `wheel_travel`/`wheel_velocity` for real, so
+      `mathChannelEvalProvider`'s name-based routing to
+      `estimate_suspension_into_store` is redundant. Deferred out of the
+      attitude phase-1 change deliberately (it is provider surgery serving no
+      phase-1 goal). Removing it makes app and CLI share one path.
+
+- [ ] **Estimator config diverges between app and CLI (2026-07-28)** — the
+      bridge runs the estimator with the user's `SuspensionConfig`, while the
+      evaluator functions use `EstimatorConfig::default()`. A tuned session can
+      therefore give different numbers in the app than in a CLI render. Decide
+      whether the evaluator should read tuning from the workbook.
+
 - [ ] **Video overlay phase 3 — app UI (2026-07-09)** — Analyze video panel
       as a worksheet slot kind (media_kit), cursor↔playback sync through the
       §26.7 synchronized-cursor contract, live overlay preview via
