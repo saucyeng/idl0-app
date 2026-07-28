@@ -234,6 +234,50 @@ const List<MathChannel> kBuiltinMathChannels = [
     color: '#FFFF9800',
     expression: 'wheel_velocity("rear")',
   ),
+  // Attitude and gravity-removed body acceleration — same estimator run as the
+  // suspension channels above, surfaced the same way. Unlike `wheel_*`, these
+  // expressions evaluate for real in the engine (idl-rs `math::eval`), so they
+  // work in the CLI as well as the app.
+  MathChannel(
+    id: 'builtin:EstRoll',
+    name: 'Roll (deg)',
+    quantity: 'angle',
+    units: 'deg',
+    sampleRateHz: 0.0,
+    decimalPlaces: 1,
+    color: '#FF81C784',
+    expression: 'attitude("roll")',
+  ),
+  MathChannel(
+    id: 'builtin:EstPitch',
+    name: 'Pitch (deg)',
+    quantity: 'angle',
+    units: 'deg',
+    sampleRateHz: 0.0,
+    decimalPlaces: 1,
+    color: '#FFAED581',
+    expression: 'attitude("pitch")',
+  ),
+  MathChannel(
+    id: 'builtin:EstAccelLong',
+    name: 'Longitudinal accel (g)',
+    quantity: 'acceleration',
+    units: 'g',
+    sampleRateHz: 0.0,
+    decimalPlaces: 2,
+    color: '#FFE57373',
+    expression: 'body_accel("long")',
+  ),
+  MathChannel(
+    id: 'builtin:EstAccelLat',
+    name: 'Lateral accel (g)',
+    quantity: 'acceleration',
+    units: 'g',
+    sampleRateHz: 0.0,
+    decimalPlaces: 2,
+    color: '#FFBA68C8',
+    expression: 'body_accel("lat")',
+  ),
 ];
 
 /// A named numeric constant for use in math channel expressions. Lives on the
@@ -409,11 +453,10 @@ class MathChannelValidator {
     'current_lap', 'lap_start_time', 'lap_start_distance', 'sector_number',
     // Variance (ghost-lap comparison; evaluate against main/overlay laps)
     'variance_time', 'variance_dist',
-    // Suspension virtual sensors (offline geometry-constrained estimator). These
-    // do not evaluate as expressions — mathChannelEvalProvider routes them to the
-    // estimator — but they are listed here so the builtin channels' descriptive
-    // `wheel_travel("front")` / `wheel_velocity("rear")` forms validate cleanly.
-    'wheel_travel', 'wheel_velocity',
+    // Estimator-backed virtual sensors (offline geometry-constrained
+    // estimator). `wheel_*` are still routed by mathChannelEvalProvider;
+    // `attitude`/`body_accel` evaluate for real in the engine.
+    'wheel_travel', 'wheel_velocity', 'attitude', 'body_accel',
   };
 
   /// Returns null if [expression] is valid, or a human-readable error string
