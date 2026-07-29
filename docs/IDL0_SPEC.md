@@ -3251,7 +3251,8 @@ phases 2–3 and are NOT described here yet.
 `overlay::model::OverlayLayout` — stored in the workbook (`.idl0wb`,
 `workbook_version: 2`, additive field `overlay_layouts`). Elements: `gauge`
 (styles `numeric | bar | dial`; fields `channel`, `label`, `min`, `max`),
-`attitude` (styles `roll | steer`; fields `channel`, `range_deg`),
+`attitude` (styles `roll | steer`; fields `channel`, `range_deg`, and for
+the `roll` style an optional `pitch_channel`, §33.4),
 `trace_strip` (`channels[]`, `window_s`), `track_map`, `lap_panel`. Rects are
 normalized `[x, y, w, h]` fractions of the canvas. `canvas` (`"1920x1080"`) is
 design-space for stroke/font scaling only — never an output resolution.
@@ -3310,12 +3311,38 @@ surfaced to the user and nothing is stored.
 (OFL). Deterministic (golden-image tested). The video compositor is the first
 consumer of the overlay model, not its owner.
 
+**Attitude indicator (`roll` style).** A conventional artificial horizon:
+sky/ground hemispheres split by a horizon line, a pitch ladder at 10°
+intervals (±30° spans the ball radius), a fixed amber aircraft symbol, a bank
+scale on the bezel with a pointer riding the horizon, and a `roll pitch`
+readout. Binding `pitch_channel` translates the horizon vertically; leaving it
+unbound pins the horizon level so a roll-only layout still renders — an
+*unbound* pitch is not the no-data state, only a missing **roll** value is.
+
+The horizon **counter-rotates**: banking right by φ rotates the drawn world by
+−φ while the aircraft symbol stays fixed. This is what a real attitude
+indicator does (the gyro-stabilised disk holds still in space while the case
+turns with the vehicle), and on a bike it matches the footage directly, since
+the camera is bolted to the frame and the filmed horizon tilts the same way.
+Positive roll is leaning right and positive pitch is nose up (§19), so nose-up
+places the horizon *below* centre — you are looking above it.
+
 ### 33.5 Export driver (`video-export` crate)
 
 The only process-spawning component. `ffprobe` (JSON) probes width/height/
 fps/duration/rotation/audio; `ffmpeg` receives rendered frames as a second
 rawvideo RGBA input piped to stdin, `filter_complex overlay`, audio
 stream-copied, `libx264` default (`--encoder` overrides), `+faststart`.
+
+**Quality.** `ExportPlan.quality` is one constant-quality number mapped to
+whatever the chosen encoder understands: `-crf` for x264/x265/SVT-AV1/rav1e,
+and `-rc vbr -cq <q> -b:v 0` for NVENC/QSV/AMF (`-cq` alone is ignored under
+NVENC's default rate control, which silently caps the bitrate instead).
+Unrecognised encoders get no rate flags. Without this the encoders are not
+comparable — libx264 defaults to CRF 23 while NVENC defaults to roughly
+2 Mbps, so switching to the GPU encoder looked ~2.6× faster while actually
+producing a 16× smaller, visibly worse file. Pinned at equal quality on the
+reference clip, NVENC is ~3.8× faster and larger, which is the real trade.
 Output writes to `<out>.part`, renamed on success. VFR input is normalized to
 CFR; rotation metadata is applied at probe time. Progress = frames fed /
 total; cancel kills the child and removes the `.part`.
@@ -3340,8 +3367,8 @@ same software argv as before.
 
 - `idl-rs overlay <session.idl0> --video <v.mp4> --workbook <w.idl0wb>
   [--layout <name>] [--track <t.idl0t>] [--offset <s>] [--start <s>]
-  [--duration <s>] [--output <out.mp4>] [--encoder <name>] [--rotate <deg>]
-  [--hwaccel <name>] [--ffmpeg <path>]`
+  [--duration <s>] [--output <out.mp4>] [--encoder <name>] [--quality <0-51>]
+  [--rotate <deg>] [--hwaccel <name>] [--jobs <n>] [--ffmpeg <path>]`
   — bulk command (§29.7 envelope: artifact on success, error envelope on
   stderr). `--layout` optional only when the workbook has exactly one layout.
   `--track` enables the lap panel; without it lap elements render no-data.

@@ -12,6 +12,27 @@ Log file schema versions and app versions are independent. Both are noted where 
 
 ### Added
 
+- **The attitude element is a real artificial horizon (2026-07-29).** It was a
+  line and a triangle; it is now a conventional attitude indicator —
+  sky/ground hemispheres, a 10°-interval pitch ladder, a fixed amber aircraft
+  symbol, a bezel bank scale with a pointer riding the horizon, and a
+  `roll pitch` readout. The `attitude` element gains an optional
+  `pitch_channel` (`serde(default)`, omitted from JSON when unset, so existing
+  workbooks round-trip unchanged); with it bound the horizon translates with
+  pitch, without it the horizon stays level and only roll animates. An unbound
+  pitch is *not* the no-data state — only a missing roll value is. The horizon
+  counter-rotates, which is both what a real AI does and what matches the
+  footage, since the camera is bolted to the frame. SPEC §33.1/§33.4.
+
+- **`--quality` for video export (2026-07-29).** One constant-quality number
+  mapped per encoder family: `-crf` for x264/x265, `-rc vbr -cq <q> -b:v 0`
+  for NVENC/QSV/AMF. Previously *no* rate flag was emitted at all, so each
+  encoder fell back to its own default — CRF 23 for libx264 versus roughly
+  2 Mbps for NVENC. That made the GPU encoder look 2.6× faster when it was
+  really producing a 16× smaller, visibly worse file. Pinned at equal quality
+  on the reference clip, NVENC is **3.8× faster** (59 s vs 224 s) and larger,
+  which is the honest trade. Default 20. SPEC §33.5.
+
 - **Attitude moved from the IEKF to expressions — an AHRS in the math language
   (2026-07-28).** `Roll (deg)`, `Pitch (deg)`, `Longitudinal accel (g)` and
   `Lateral accel (g)` are now built-in **math channels** rather than estimator

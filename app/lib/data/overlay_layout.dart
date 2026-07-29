@@ -138,8 +138,16 @@ class GaugeElement extends OverlayElement {
 /// Signed zero-centered indicator; [style] ∈ `roll | steer`; [rangeDeg] is
 /// full-scale deflection in degrees.
 class AttitudeElement extends OverlayElement {
-  /// Channel id sampled for the deflection angle, in degrees.
+  /// Channel id sampled for the deflection angle, in degrees. For the `roll`
+  /// style this is roll (positive leaning right).
   final String channel;
+
+  /// Optional channel id sampled for pitch, in degrees (positive nose up),
+  /// `roll` style only. When bound, the element renders a full attitude
+  /// indicator — sky/ground, pitch ladder, bank scale. When null the horizon
+  /// is pinned level and only roll animates. Omitted from JSON when null, so
+  /// workbooks written before pitch existed round-trip unchanged.
+  final String? pitchChannel;
 
   /// Rendering style: `roll | steer`.
   final String style;
@@ -153,6 +161,7 @@ class AttitudeElement extends OverlayElement {
     required this.channel,
     required this.style,
     required this.rangeDeg,
+    this.pitchChannel,
   });
 
   @override
@@ -160,6 +169,7 @@ class AttitudeElement extends OverlayElement {
         'type': 'attitude',
         'rect': rect,
         'channel': channel,
+        if (pitchChannel != null) 'pitch_channel': pitchChannel,
         'style': style,
         'range_deg': rangeDeg,
       };
