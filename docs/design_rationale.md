@@ -697,3 +697,81 @@ typed `TrackType` rejects tracks whose handler is not video/audio/subtitle
 reads only what the feature needs (gpmd sample table, creation time,
 video dims/fps) with bounds-checked reads, consistent with "the engine
 owns binary parsing."
+
+## Composition model: one slot schema, Rust owns the picture (2026-07-29)
+
+**Supersedes part of "Video overlay: sidecar ffmpeg + one rasterizer"
+(2026-07-09).** That entry concluded a future chart-canvas overlay would
+"composit in Flutter, because interactive chart chrome needs hit-testing,
+DPI-native text, and resize-fluid layout that a texture stream can't
+give," and declared pixel parity between the two compositors a non-goal.
+The hit-testing and layout half of that reasoning was wrong, for a reason
+worth recording: it conflated **the picture** (data-dependent, must be
+reproducible headlessly) with **the behaviour** (pointer handling, hover
+state, resize, zoom). Only the picture has to cross into the engine.
+Behaviour lives above the painter and never leaves Dart. The DPI-native
+text concern survives and is now the main open risk (below).
+
+**What forced the revision.** Two facts collided. First, every slot type
+can be stacked over video — there is no principled subset that stays
+chart-only. Second, export is headless: it runs in the `idl-rs` CLI with
+no Flutter engine, so any slot that appears in an export needs an engine
+painter. Together those mean every chart type needs a Rust painter
+regardless of what the app does, at which case the Flutter painter for
+that type is a redundant twin rather than a complement. The duplication
+is not a design choice; it is arithmetic.
+
+The cost was already being paid invisibly. `ChartType.spectrogram`
+(`app/lib/ui/tabs/analyze/spectrogram_chart.dart`, 999 lines) and a
+planned overlay spectrogram element were about to become two
+implementations of one view, over an STFT the engine already computes
+(`core/src/spectrogram.rs`). The second one was queued as ordinary
+feature work; nothing in the model made the redundancy visible.
+
+**The real duplication was vocabulary, not painters.** Two ways to say
+which channels, what range, what colours, what window length is what let
+those two spectrograms exist as unrelated things. A pixel difference is
+cosmetic; a settings difference is a bug. So the non-negotiable piece is a
+single slot descriptor covering charts, instruments and video as peers,
+stored once in the workbook — which the engine already parses
+(`core/src/workbook/`). Corollary, adopted as a rule: **no
+renderer-only parameters.** Anything the renderer honours is exposed in
+the UI, or the vocabulary re-splits along the seam we just removed.
+
+**Video is a slot, not a backdrop.** Framing the feature as "an overlay
+drawn onto a video" made the 9:16 case (a 16:9 clip letterboxed into a
+reel, dead space filled with gauges and charts) look like a separate
+feature. Treating video as one slot type among peers makes it a canvas
+size plus a layout: classic overlay is a video slot filling the canvas
+with slots above it; a reel is a video slot in a middle band. Chart-on-
+chart stacking falls out of the same z-order.
+
+**Parity is semantic, not per-pixel.** Chasing pixel-identity against a
+third-party library that moves underneath us is a treadmill we would
+lose, and it cannot be cheaply proven. Contractual: identical data,
+decimation, axis ranges, colours, units, ordering — guaranteed because
+one schema drives both. Not contractual: line widths, font metrics,
+anti-aliasing, tick placement. Written down so future readers know which
+differences are bugs.
+
+**Scrolling is translation, not redraw.** A scrolling trace at t and
+t+16 ms is the same picture shifted one pixel. Rendering wide and panning
+a clip rect keeps live playback O(1) per frame; a tile cache around the
+playhead bounds memory on long sessions. Only genuinely live elements
+(gauge, attitude, a g-g dot) re-render per frame, and they are small.
+This is what makes real-time playback tractable without a GPU rasteriser.
+
+**Open risk, honestly held.** Axis typography and the long tail of
+edge-case correctness (NaN gaps, single-sample series, flat ranges, tick
+selection at awkward scales) are what a mature charting library quietly
+absorbs. tiny-skia plus fontdue with one embedded font is a step down
+from Flutter's text stack, and there is no architectural escape: letting
+Flutter draw labels on screen while Rust draws them for export
+recreates the duplication one layer down. The mitigations are empirical,
+not structural — a side-by-side parity harness gating each migration,
+golden tests in CI (which fl_chart output never had), and per-chart-type
+reversibility. **Stopping partway is a supported outcome:** if parity
+costs more than it returns, the engine keeps the overlay/instrument
+painters, Analyze keeps fl_chart, and the duplication is accepted as the
+price of typography. The single schema is worth landing in that branch
+too, which is why it goes first.

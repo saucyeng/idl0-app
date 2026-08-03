@@ -8,6 +8,91 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
 
 ## Active / awaiting hardware verification
 
+### Composition roadmap (design_rationale 2026-07-29)
+
+Sub-projects are numbered; sub-parts are lettered. Each gets its own spec
+section when picked up — **not** one monolithic spec. Rationale and the
+explicit stop criteria are in `docs/design_rationale.md` ("Composition
+model: one slot schema, Rust owns the picture").
+
+Dependency that sets the order: **export is headless Rust**, so any slot
+type appearing in an export needs an engine painter. Sub-project 3 ships
+on the painters that already exist (gauge, attitude/AHRS, trace strip,
+track map, lap panel); richer layouts wait on 6.
+
+- [ ] **1. Unified slot schema** — the only urgent one; everything else
+      builds on it and it gets more expensive the longer two vocabularies
+      coexist. Valuable even if the renderer migration is later abandoned.
+      - [ ] 1a One slot descriptor covering chart types, instruments and
+            video as peers. Today: `ChartType` + `ChartSlot`
+            (`app/lib/data/worksheet.dart`) and `OverlayElement`
+            (`rust/core/src/overlay/model.rs`) are unrelated vocabularies
+            for the same concepts.
+      - [ ] 1b Z-order, so slots stack (chart-on-chart, chart-on-video).
+      - [ ] 1c Canvas + aspect first-class (16:9, 9:16, 1:1).
+            `OverlayLayout.canvas` ("WxH") already generalises.
+      - [ ] 1d **Rule: no renderer-only parameters.** Anything the
+            renderer honours is exposed in the UI, or the vocabulary
+            re-splits along the seam this removes.
+      - [ ] 1e `.idl0wb` migration from `overlay_layouts` (workbook v2).
+
+- [ ] **2. Cursor playback** — depends on nothing, small, wanted since the
+      start. Good filler whenever something else is blocked.
+      - [ ] 2a Playhead layer over existing charts (Flutter overlay; no
+            content repaint — see `_SpectrogramOverlayPainter` for the
+            established pattern).
+      - [ ] 2b Transport controls / scrub.
+      - [ ] 2c Lap-table sync.
+
+- [ ] **3. Video slot + composition geometry** (needs 1) — ships the reels
+      use case on existing painters, and turns the Analyze tab into the
+      live overlay editor, which is what fixes the design-iteration pain
+      that started this.
+      - [ ] 3a Video as a peer slot type.
+      - [ ] 3b 9:16 canvas: 16:9 clip letterboxed, dead space filled.
+      - [ ] 3c Export filter graph gains scale/pad/overlay; the RGBA frame
+            becomes full-canvas with a transparent window for the video
+            (today it is a plain overlay).
+      - [ ] 3d In-app playback package decision. `video_player` is weak on
+            Windows desktop; `media_kit` (libmpv) is the usual desktop
+            choice. **Biggest new risk in the roadmap** — five-platform
+            packaging, bigger than anything in the renderer.
+      - [ ] 3e Paused video frame behind the Analyze workspace.
+
+- [ ] **4. Rust owns the picture** (needs 1)
+      - [ ] 4a `ChartFrame` contract: RGBA + plot rect + data bounds +
+            per-column (min,max,mean). The column table is what makes
+            hover a Dart array index instead of a per-move FFI call —
+            ~30 KB beside ~3.8 MB of pixels.
+      - [ ] 4b Display widget: `ImageDescriptor.raw` (**not**
+            `decodeImageFromPixels` — the raw path skips image decoding;
+            getting this wrong is ~2 ms vs ~20 ms). External textures are
+            deliberately not used: tiny-skia is a CPU rasteriser, so the
+            CPU→GPU upload happens either way and the texture path only
+            saves a Dart-heap hop, at the cost of native glue on five
+            platforms. Revisit only if rasterisation ever moves to GPU.
+      - [ ] 4c Spectrogram first — the engine already computes the STFT
+            (`core/src/spectrogram.rs`) and `spectrogram_chart.dart`
+            already splits content from cursor painters, so the seam
+            exists. Deletes most of 999 lines rather than adding to them.
+      - [ ] 4d **Parity harness** — same slot, both painters, side by
+            side. This is the migration gate, not a nicety.
+
+- [ ] **5. Scrolling** (needs 2, 4)
+      - [ ] 5a Translation-based pan: render wide, move a clip rect. A
+            scrolling trace at t and t+16 ms is one picture shifted a
+            pixel — not a redraw.
+      - [ ] 5b Tile cache around the playhead (an hour of strip is
+            ~400 MB; decimation already works in tiles keyed by channel).
+
+- [ ] **6. Remaining chart-type migrations** (needs 4) — one at a time,
+      each gated on 4d, each independently reversible. Allowed to stop
+      partway and stay stopped.
+
+- [ ] **7. Reel templates** (needs 3; richer with 6) — canned 9:16
+      layouts. The actual sales artifact.
+
+
 - [ ] **Validate the AHRS attitude channels against real footage (2026-07-28)**
       — supersedes the estimator-roll validation below for the *user-facing*
       channels. `Roll (deg)` and friends are now expressions (SPEC §19), proven
