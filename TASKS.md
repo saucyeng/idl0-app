@@ -279,6 +279,11 @@ track map, lap panel); richer layouts wait on 6.
       whether the `accel_z`-off-on-IMU1/2 channel mask (`0x3BEFF`) is intentional.
 
 ## Completed
+- [x] ~~**Download site — software.saucyeng.com (2026-07-27)**~~ — **removed
+      2026-07-29**: Pages was never enabled and the DNS record never created, so
+      it never served. Superseded by linking GitHub releases; a branded page, if
+      wanted, belongs in the Vercel-built saucyeng.com repo. Original entry
+      below kept for history.
 - [x] **Download site — software.saucyeng.com (2026-07-27)** — public download
       home for the app as a self-contained GitHub Pages static page (`site/`):
       OS-detected primary button + Android/Linux/Windows list + version, all

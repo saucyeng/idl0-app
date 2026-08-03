@@ -10,10 +10,9 @@ The companion app handles all signal processing, filtering, FFT, calibration, an
 
 ## Download
 
-Get the companion app for **Android, Linux, or Windows** at
-**[software.saucyeng.com](https://software.saucyeng.com)** — it always tracks the
-latest [release](https://github.com/saucyeng/idl0-app/releases). (macOS and iOS
-builds come later.)
+Get the companion app for **Android, Linux, or Windows** from the
+**[latest release](https://github.com/saucyeng/idl0-app/releases/latest)**.
+(macOS and iOS builds come later.)
 
 ## Hardware
 

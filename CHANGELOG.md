@@ -8,6 +8,20 @@ Log file schema versions and app versions are independent. Both are noted where 
 
 ---
 
+
+### Removed
+
+- **GitHub Pages download site (2026-07-29).** `site/` and
+  `.github/workflows/pages.yml` are deleted. The page was never actually
+  reachable: Pages was never enabled in repo settings (its first run, on today's
+  push, failed with "Get Pages site failed"), and `software.saucyeng.com` has no
+  DNS record — so the README had been advertising a dead link. Downloads now
+  point at the GitHub releases page directly. saucyeng.com already builds from
+  git via Vercel, so a second push-to-deploy pipeline earns nothing; if a
+  branded download page is wanted it belongs there, next to the rest of the
+  site. Documentation stays in `docs/`, rendered by GitHub, and can be published
+  from the site repo later without moving out of this one.
+
 ## [Unreleased]
 
 ### Added
