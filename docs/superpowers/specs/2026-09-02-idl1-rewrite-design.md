@@ -34,7 +34,7 @@ Final, in the order they were made.
 | D8 | **Workbook = Framework-compatible Markdown** (`.idl1wb`): front matter + prose + ` ```js ` cells, plus our ` ```math ` and ` ```table ` extensions. |
 | D9 | **Video export is sidelined.** Tag and delete the Rust painters, `video-export`, and the CLI `overlay` command on the idl1 line. Reels return later, rendering from the workbook. |
 | D10 | **Catalog = SQLite** (`rusqlite`, bundled), a rebuildable index, never synced. Not SurrealDB/LibSQL. |
-| D11 | **One chart library**: Plot + D3. No ECharts/ECharts-GL. Dense rasters come from Rust. |
+| D11 | **One chart library**: Plot + D3. Dense rasters come from Rust. ECharts/ECharts-GL is a recognised possible escape hatch for a chart class D3 can't reach (e.g. GPU 3-D), assumed not needed; adding it later is a bundled-library decision, not an architectural one. |
 | D12 | **Frontend: React + TypeScript + Vite** (tentative — low-regret; CodeMirror, Plot and the Runtime are framework-agnostic, so only app chrome is affected by a change). |
 | D13 | **Cell editor = Properties + Code** panes now; an **Agent** tab arrives with lane L12. Until then, Claude Code edits the file and the app follows it live. |
 
