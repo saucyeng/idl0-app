@@ -24,6 +24,12 @@ Log file schema versions and app versions are independent. Both are noted where 
 
 ## [Unreleased]
 
+### Changed
+
+- **idl0-app is feature-frozen (2026-09-02).** The app is being succeeded by
+  idl1-app (design: `docs/superpowers/specs/2026-09-02-idl1-rewrite-design.md`).
+  The idl-rs submodule is pinned at `1e55bac` (`idl0-final`) for good.
+
 ### Added
 
 - **The attitude element is a real artificial horizon (2026-07-29).** It was a

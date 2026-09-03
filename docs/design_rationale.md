@@ -775,3 +775,16 @@ costs more than it returns, the engine keeps the overlay/instrument
 painters, Analyze keeps fl_chart, and the duplication is accepted as the
 price of typography. The single schema is worth landing in that branch
 too, which is why it goes first.
+
+## idl0-app ends; idl1-app begins (2026-09-02)
+
+idl0-app is retired in favour of a new repository, idl1-app: Rust backend in
+Tauri v2, Observable Plot/D3 notebook cells, Parquet canonical store, LAN sync.
+The reasoning, decisions and decomposition are in
+`docs/superpowers/specs/2026-09-02-idl1-rewrite-design.md`; this entry only
+records that the turn happened and what it does to this repo. The engine
+submodule is pinned at `1e55bac` (idl-rs tag `idl0-final`) and is never bumped
+again; engine fixes idl0 still needs come from the idl-rs `idl0-maint` branch.
+The composition roadmap (2026-07-29) is superseded: its on-screen tiny-skia
+migration is abandoned, its insights (one vocabulary, tile decimation, hover
+from per-column stats, translation-not-redraw) carry into idl1.

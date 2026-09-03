@@ -10,6 +10,10 @@ Mark tasks done only when `flutter test` passes and coverage targets are met.
 
 ### Composition roadmap (design_rationale 2026-07-29)
 
+> **Superseded 2026-09-02.** idl0-app is being replaced by idl1-app; see
+> `docs/superpowers/specs/2026-09-02-idl1-rewrite-design.md`. Sub-projects 1–7
+> below are not being worked. Only bug fixes land in this repo from here on.
+
 Sub-projects are numbered; sub-parts are lettered. Each gets its own spec
 section when picked up — **not** one monolithic spec. Rationale and the
 explicit stop criteria are in `docs/design_rationale.md` ("Composition
